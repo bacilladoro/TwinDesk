@@ -14,11 +14,35 @@ const { execFile, execFileSync } = require('child_process');
 // "Mute this Mac" sent silence) and keeps the other computer's sound in (Electron plays it from
 // another process), which loops when both share sound. Its features go in main.js's enable-features.
 const LOOPBACK_FEATURES = ['MacLoopbackAudioForScreenShare', 'MacSckSystemAudioLoopbackOverride'];
+<<<<<<< HEAD
 function loopback() {
   if (process.platform !== 'darwin' || !process.env.TWINDESK_LOOPBACK_AUDIO) return false;
   const [major, minor] = String(process.getSystemVersion ? process.getSystemVersion() : '0').split('.').map(Number);
   return major > 14 || (major === 14 && minor >= 2);
 }
+=======
+// Audio › Capture engine ('helper' | 'system'), as it was when TwinDesk started: Chromium's capture
+// needs its features switched on at launch, so a change applies after a restart.
+let startEngine = null;
+function engineAtStart() {
+  if (startEngine !== null) return startEngine;
+  startEngine = 'helper';
+  try {
+    const { app } = require('electron');
+    const s = JSON.parse(require('fs').readFileSync(require('path').join(app.getPath('userData'), 'settings.json'), 'utf8'));
+    if (s && s.audio && s.audio.engine === 'system') startEngine = 'system';
+  } catch (_) {}
+  return startEngine;
+}
+function loopbackAvailable() {
+  if (process.platform !== 'darwin') return false;
+  const [major, minor] = String(process.getSystemVersion ? process.getSystemVersion() : '0').split('.').map(Number);
+  return major > 14 || (major === 14 && minor >= 2);
+}
+function loopback() {
+  return loopbackAvailable() && (!!process.env.TWINDESK_LOOPBACK_AUDIO || engineAtStart() === 'system');
+}
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
 class AudioHub {
   constructor(helper, getSettings) {
@@ -105,4 +129,8 @@ class AudioHub {
   }
 }
 
+<<<<<<< HEAD
 module.exports = { AudioHub, loopback, LOOPBACK_FEATURES };
+=======
+module.exports = { AudioHub, loopback, loopbackAvailable, engineAtStart, LOOPBACK_FEATURES };
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b

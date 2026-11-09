@@ -1,7 +1,13 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
 // The control window's look, in the renderer of each app (after its UI kit):
+<<<<<<< HEAD
 //   UI.look(state.look): the accent colour into --accent (and --accent-soft, from it in the CSS).
 //   UI.themeRow / UI.accentRow: General › Appearance's pickers.
+=======
+//   UI.look(state.look): the accent colour into --accent (and --accent-soft, from it in the CSS), and
+//     Glass or Simple as html.glass (shared/ui-glass.css; shared/look-early.js set it before the first paint).
+//   UI.styleRow / UI.themeRow / UI.accentRow: General › Appearance's pickers.
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 //   UI.sections(cards): a long page in sections, a sticky list of the card titles beside it. A click
 //     scrolls to that card, and the list follows where the page is as it scrolls (one page still).
 'use strict';
@@ -11,12 +17,27 @@
   let applied = '';
 
   UI.look = (look) => {
+<<<<<<< HEAD
+=======
+    if (look && look.style) document.documentElement.classList.toggle('glass', look.style !== 'simple');
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     const c = look && look.color;
     if (!c || c === applied) return;
     applied = c;
     document.documentElement.style.setProperty('--accent', c);
   };
 
+<<<<<<< HEAD
+=======
+  // Glass (the default: the iPad app's look) or Simple (flat, as before).
+  UI.styleRow = (onChange) => {
+    const seg = UI.segmented([{ value: 'glass', label: t('look.glass') }, { value: 'simple', label: t('look.simple') }], onChange);
+    const row = UI.row(t('Style'), t('Glass: soft colours from the accent behind translucent cards'), [seg.el]);
+    row.render = (v) => seg.set(v === 'simple' ? 'simple' : 'glass');
+    return row;
+  };
+
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   UI.themeRow = (onChange) => {
     const seg = UI.segmented([
       { value: 'system', label: t('System') }, { value: 'light', label: t('look.light') }, { value: 'dark', label: t('look.dark') },

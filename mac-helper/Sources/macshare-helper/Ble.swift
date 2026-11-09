@@ -5,7 +5,12 @@
 // DOWN. main pipes that to the session server on 127.0.0.1 (shared/blepipe.js), so the session runs
 // through Bluetooth exactly as over the network: the same TLS, pinned certificate and token.
 //
-// Commands: bleStart {info}, bleStop, bleSend {dev, data (base64)}, bleCtrl {dev, msg (JSON text)}.
+// Commands: bleStart {info}, bleStop, bleHold, bleSend {dev, data (base64)}, bleCtrl {dev, msg (JSON text)}.
+// bleHold (the session on Wi-Fi, an iPhone linked): no advertising, but the service and the links
+// that are up stay, on a slow connection interval; advertising comes back while none is left, so the
+// iPhone can find this Mac again. bleHold {advertise: true}: held, still advertising (the session's
+// iPhone isn't linked yet; any other link no longer keeps it from finding this Mac).
+// bleStart after it picks up where it was (no links dropped).
 // Events: ble.state {state: on|off|unauthorized|unsupported}, ble.guest {dev, hello}, ble.open {dev},
 //         ble.data {dev, data}, ble.close {dev} (its pipe closed), ble.gone {dev} (it went away),
 //         ble.sent {dev, bytes}.
@@ -32,22 +37,45 @@ final class BlePeripheral: NSObject, CBPeripheralManagerDelegate {
   private var out = [UUID: [(CBMutableCharacteristic, Data)]]()
   private var sentBytes = [UUID: Int]()
   private var lastState = ""
+  private var added = false // the service is up (didAdd)
+  private var holding = false // bleHold: quiet, links kept
+  private var holdAds = false // bleHold {advertise}: held but advertising
 
   func start(info: Data) {
     queue.async {
+      let same = self.added && self.info == info
       self.info = info
       self.wanted = true
+      let wasHolding = self.holding
+      self.holding = false
+      self.holdAds = false
       if self.pm == nil {
         self.pm = CBPeripheralManager(delegate: self, queue: self.queue)
+      } else if same && wasHolding {
+        self.latency(.low)
+        self.advertise() // back from bleHold: the links stay
       } else {
         self.publish()
       }
     }
   }
 
+  // Quiet but linked (see the top): only advertising stops.
+  func hold(advertise ads: Bool) {
+    queue.async {
+      guard self.wanted, self.added else { return }
+      self.holding = true
+      self.holdAds = ads
+      self.latency(.high)
+      if self.centrals.isEmpty || ads { self.advertise() } else { self.pm?.stopAdvertising() }
+    }
+  }
+
   func stop() {
     queue.async {
       self.wanted = false
+      self.holding = false
+      self.added = false
       self.pm?.stopAdvertising()
       self.pm?.removeAllServices()
       self.out.removeAll()
@@ -70,6 +98,7 @@ final class BlePeripheral: NSObject, CBPeripheralManagerDelegate {
     guard let pm = pm, pm.state == .poweredOn, wanted else { return }
     pm.stopAdvertising()
     pm.removeAllServices()
+    added = false
     let infoChr = CBMutableCharacteristic(type: Self.infoId, properties: [.read], value: info, permissions: [.readable])
     let ctrlChr = CBMutableCharacteristic(type: Self.ctrlId, properties: [.write, .notify], value: nil, permissions: [.writeable])
     let upChr = CBMutableCharacteristic(type: Self.upId, properties: [.write, .writeWithoutResponse], value: nil, permissions: [.writeable])
@@ -79,6 +108,17 @@ final class BlePeripheral: NSObject, CBPeripheralManagerDelegate {
     ctrl = ctrlChr
     down = downChr
     pm.add(svc)
+  }
+
+  private func advertise() {
+    guard let pm = pm, pm.state == .poweredOn, added, !pm.isAdvertising else { return }
+    pm.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [Self.serviceId], CBAdvertisementDataLocalNameKey: "TwinDesk"])
+  }
+
+  // Idle links held through Wi-Fi: the slowest interval, so they cost the radio (and Wi-Fi) next to nothing.
+  private func latency(_ l: CBPeripheralManagerConnectionLatency) {
+    guard let pm = pm else { return }
+    for c in centrals.values { pm.setDesiredConnectionLatency(l, for: c) }
   }
 
   private func setState(_ s: String) {
@@ -96,6 +136,7 @@ final class BlePeripheral: NSObject, CBPeripheralManagerDelegate {
     case .unsupported: setState("unsupported")
     default:
       setState("off")
+      added = false
       out.removeAll()
       for dev in centrals.keys { emit(["event": "ble.gone", "dev": dev.uuidString]) }
       centrals.removeAll()
@@ -104,7 +145,8 @@ final class BlePeripheral: NSObject, CBPeripheralManagerDelegate {
 
   func peripheralManager(_ p: CBPeripheralManager, didAdd service: CBService, error: Error?) {
     if let error = error { return log("ble: add service: \(error.localizedDescription)") }
-    p.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [Self.serviceId], CBAdvertisementDataLocalNameKey: "TwinDesk"])
+    added = true
+    if !holding || holdAds || centrals.isEmpty { advertise() }
   }
 
   func peripheralManagerDidStartAdvertising(_ p: CBPeripheralManager, error: Error?) {
@@ -113,6 +155,10 @@ final class BlePeripheral: NSObject, CBPeripheralManagerDelegate {
 
   func peripheralManager(_ p: CBPeripheralManager, central: CBCentral, didSubscribeTo chr: CBCharacteristic) {
     centrals[central.identifier] = central
+    if holding {
+      p.setDesiredConnectionLatency(.high, for: central)
+      if !holdAds { p.stopAdvertising() } // found again: quiet once more
+    }
   }
 
   // The central went away (or stopped listening): its pipe is over. CoreBluetooth has no
@@ -122,6 +168,7 @@ final class BlePeripheral: NSObject, CBPeripheralManagerDelegate {
     centrals.removeValue(forKey: central.identifier)
     out.removeValue(forKey: central.identifier)
     emit(["event": "ble.gone", "dev": central.identifier.uuidString])
+    if holding && centrals.isEmpty { advertise() } // its link dropped: it can find this Mac again
   }
 
   func peripheralManager(_ p: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {

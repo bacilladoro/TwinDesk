@@ -6,7 +6,7 @@ html, body {
 }
 button { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0; touch-action: none; }
 button.down, button.on { background: var(--accent); border-color: var(--accent); }
-body:not(.pad) .pad-only, body:not(.gamepad) .game-only { display: none !important; }
+body:not(.pad) .pad-only, body:not(.gamepad) .game-only, body:not(.voice) .voice-only { display: none !important; }
 
 #top { position: fixed; top: 0; left: 0; right: 0; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 14px; box-sizing: border-box; background: var(--card); z-index: 2; }
 #name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -32,6 +32,7 @@ body:not(.pad) .pad-only, body:not(.gamepad) .game-only { display: none !importa
    top corners, where the index fingers (or the thumbs, reaching up) find them ---- */
 body.gamepad #top { left: 50%; right: auto; transform: translateX(-50%); width: 44vw; height: 40px; border-radius: 0 0 14px 14px; }
 body.gamepad #note { top: 96px; left: 28vw; right: 28vw; }
+body.voice #note { top: auto; bottom: 14px; background: #3a2a10; } /* under the keys, never over the words */
 #game { position: fixed; inset: 0; }
 .g { position: absolute; display: grid; place-items: center; font-weight: 600; }
 .shoulder { width: 26vw; font-size: 17px; letter-spacing: 0.04em; }
@@ -80,3 +81,43 @@ body.gamepad #note { top: 96px; left: 28vw; right: 28vw; }
 #map-list { flex: 1; overflow-y: auto; touch-action: pan-y; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 14px; align-content: start; }
 #map-list label { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 #map-list select { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; max-width: 130px; touch-action: manipulation; }
+
+/* ---- editing the gamepad's layout (Edit) ---- */
+.g.custom { border-radius: 50%; width: 15vmin; height: 15vmin; font-size: 15px; overflow: hidden; }
+body.editing #game [data-unit] { outline: 1.5px dashed rgba(255, 255, 255, 0.35); outline-offset: 3px; }
+body.editing #game [data-unit].sel { outline: 2px solid var(--accent); }
+body.editing #game [data-unit].off { opacity: 0.3; }
+body:not(.editing) #game [data-unit].off { display: none !important; }
+body.editing #top, body.editing #note, body.editing #pad-note { display: none !important; }
+#edit-top { position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--card); border-radius: 0 0 14px 14px; white-space: nowrap; }
+#edit-top span { color: var(--muted); font-size: 12.5px; margin-right: 4px; }
+#edit-top button, #edit-bar button { height: 32px; padding: 0 12px; font-size: 13.5px; touch-action: manipulation; }
+#edit-done { background: var(--accent); border-color: var(--accent); }
+#edit-top[hidden], #edit-bar[hidden] { display: none; }
+#edit-bar { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; max-width: 96vw; overflow-x: auto; touch-action: pan-x; white-space: nowrap; font-size: 13.5px; }
+#edit-bar b { font-size: 14px; }
+#edit-bar label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+#edit-bar input[type=range] { width: 120px; touch-action: manipulation; }
+#edit-bar select, #edit-bar input:not([type]) { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; max-width: 120px; touch-action: manipulation; user-select: text; -webkit-user-select: text; }
+#edit-bar input:not([type]) { width: 80px; }
+#edit-bar [hidden] { display: none !important; }
+#edit-del { color: #ff6961; }
+
+/* ---- voice typing: a real box at the top (the keyboard comes up under it), the keys a box can't send ---- */
+body.voice { touch-action: auto; }
+#voice-view { position: fixed; top: 48px; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 12px; padding: 12px 14px 14px; box-sizing: border-box; overflow-y: auto; }
+#voice-card { flex: 1 1 auto; min-height: 140px; max-height: 46vh; display: flex; flex-direction: column; border-radius: 20px; background: var(--card); border: 1px solid var(--line); overflow: hidden; }
+#voice-card:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.22); }
+#voice { flex: 1; width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: 20px/1.45 system-ui, sans-serif; padding: 16px 18px 6px;
+  user-select: text; -webkit-user-select: text; touch-action: auto; }
+#voice::placeholder { color: #6c6c70; }
+#voice-status { display: flex; align-items: center; gap: 8px; padding: 8px 18px 12px; font-size: 12.5px; color: var(--muted); }
+#voice-dot { width: 8px; height: 8px; border-radius: 50%; background: #48484a; flex: none; transition: background-color 0.2s; }
+#voice-dot.live { background: #30d158; box-shadow: 0 0 0 4px rgba(48, 209, 88, 0.18); }
+#voice-dot.bad { background: #ff9f0a; }
+#voice-keys { flex: none; display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 1.5fr; gap: 8px; }
+#voice-keys button { height: 50px; font-size: 15px; border-radius: 14px; touch-action: manipulation; }
+#voice-keys button.primary { background: var(--accent); border-color: var(--accent); font-weight: 600; }
+#voice-keys button:active { filter: brightness(1.25); }
+#voice-help { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+#v-clear { touch-action: manipulation; }

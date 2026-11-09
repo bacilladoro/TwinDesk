@@ -17,11 +17,11 @@
   const GROUP = { overview: 0, connection: 0, messages: 1, calls: 1, media: 1, papps: 1, mirror: 2, receive: 2, share: 2, apps: 2, cursor: 3, keyboard: 3, remote: 3, clipboard: 4, notifications: 4, files: 4, pfiles: 4, mount: 4, audio: 5, camera: 5, rezume: 5, terminal: 5 };
   const ORDER = { overview: 0, connection: 1, messages: 5, calls: 6, media: 7, papps: 8, mirror: 10, receive: 11, share: 12, apps: 13, cursor: 20, keyboard: 21, remote: 22, clipboard: 40, notifications: 41, files: 42, pfiles: 43, mount: 44, audio: 60, camera: 61, rezume: 62, terminal: 63, multi: 95, general: 100, about: 110 };
   const ALIAS = { phone: 'overview', display: 'share' }; // older names (saved, the tray, a popup)
-  const orderOf = (d) => ORDER[d.id] ?? d.order ?? 50;
+  const orderOf = (d) => ORDER[UI.baseOf(d)] ?? d.order ?? 50; // a kind's own version of a page (variantOf): the page's place
   let lastGroup = null;
   let gap = null; // the gap before the current group (hidden with the group: renderSidebar)
   for (const def of UI.tabs.slice().sort((a, b) => orderOf(a) - orderOf(b))) {
-    if (def.id in GROUP) def.group = GROUP[def.id];
+    if (UI.baseOf(def) in GROUP) def.group = GROUP[UI.baseOf(def)];
     if (def.navHidden) { // reached another way (the phone tile)
       views.set(def.id, { def, ...buildPage(def), navBtn: el('button'), stateEl: el('span') });
       continue;
@@ -58,7 +58,7 @@
     ]);
     let master = null;
     if (def.master) {
-      master = UI.switch((v) => def.master.set(v), { label: tr(def.title), disabled: !!def.master.disabled });
+      master = UI.switch((v) => def.master.set(v), { label: tr(def.title), disabled: def.master.disabled === true }); // a function is looked at with the state (below)
     }
     page.append(el('header', { class: 'page-head' }, [titles, master ? master.el : null]));
     // Over Bluetooth, a page that needs Wi-Fi (and doesn't move the session onto it) says so, with
@@ -94,22 +94,35 @@
   // Where to go when a page isn't there (hidden, or nothing connected): the device, else Connection.
   const home = (s) => (linked(s) ? 'overview' : 'connection');
 
+  // A web device's pages (shared/ui-web.js) while its tile is picked (UI.webDev); any other page
+  // goes back to the sidebar's own.
   function show(id, user) {
-    id = ALIAS[id] || id;
+    id = UI.pick(ALIAS[id] || id); // the version for the device in session (shared/ui-kinds.js)
+    const want = views.get(id);
+    if (want && want.def.web && !UI.webDev) id = 'web';
+    else if (want && !want.def.web && !UI.WEB_KEEP.includes(want.def.id)) UI.webDev = null; // TwinDesk Web, AirPlay, General, About: both
     let v = views.get(id) || views.get(home(UI.state));
     if (UI.state && v.def.hidden && v.def.hidden(UI.state)) v = views.get(home(UI.state)) || v;
-    if (current === v) return;
+    if (current === v) {
+      if (UI.state) { renderSidebar(UI.state); renderPage(v, UI.state); }
+      return;
+    }
     if (current) {
       current.page.hidden = true;
       current.navBtn.classList.remove('active');
       current.navBtn.setAttribute('aria-selected', 'false');
     }
     current = v;
+    if (UI.state) renderSidebar(UI.state); // in or out of a web device's pages
     v.page.hidden = false;
     v.navBtn.classList.add('active');
     v.navBtn.setAttribute('aria-selected', 'true');
     $('content').scrollTop = 0;
+<<<<<<< HEAD
     for (const t of $('phones').children) t.classList.toggle('active', t.dataset.connected === '1');
+=======
+    for (const t of $('phones').children) t.classList.toggle('active', t.dataset.connected === '1' && !UI.webDev);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     if (user) api.setTab(v.def.id);
     if (UI.state) renderPage(v, UI.state);
   }
@@ -123,7 +136,8 @@
     if (v.master) {
       const on = !!v.def.master.get(s);
       v.master.set(on);
-      v.master.disable(!!v.def.master.disabled);
+      const d = v.def.master.disabled; // a boolean, or (s) => boolean (ReZume, Remote): a function itself isn't "disabled"
+      v.master.disable(!!(typeof d === 'function' ? d(s) : d));
       v.page.classList.toggle('off', !on);
     }
     if (v.art) { // while the page's switch is off; on a page without one, until dismissed
@@ -147,19 +161,36 @@
     const gs = s.guest && s.guest.status && s.guest.status.state;
     $('peer-text').textContent = c ? `${c.name}${UI.via(s) !== 'Wi-Fi' ? ` · ${UI.via(s)}` : ''}${c.rttMs != null ? ` · ${c.rttMs} ms` : ''}`
       : s.pairing || (s.guest && s.guest.pairing) ? tr('Pairing…') : gs === 'connecting' || gs === 'reconnecting' ? tr('Connecting…') : tr('Not connected');
+    if (UI.webDev && !UI.webDevOf(s)) UI.webDev = null; // forgotten meanwhile
+    // A web device's pages: the line under TwinDesk is that device (shared/ui-web.js).
+    const wl = UI.webPeerLine && UI.webPeerLine(s);
+    if (wl) { $('peer-text').textContent = wl.text; $('peer-dot').className = `dot ${wl.dot}`; }
     renderPhones(s);
     renderPcs(s);
+<<<<<<< HEAD
     // Tabs that don't apply to the peer (a phone has no terminal or screen to share to it…).
+=======
+    UI.webTiles($('webdevs'), s, (devId) => {
+      UI.webDev = devId;
+      show(devId ? (current && current.def.web ? current.def.id : 'wd-overview') : 'web', true);
+    });
+    // Tabs that don't apply to the peer (a phone has no terminal or screen to share to it…). A web
+    // device picked: its own pages, then TwinDesk Web, AirPlay & SMB, General and About.
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     for (const v of views.values()) {
-      const hide = !!(v.def.hidden && v.def.hidden(s));
+      const hide = UI.webDev ? !v.def.web && !UI.WEB_KEEP.includes(v.def.id)
+        : !!v.def.web || !!(v.def.hidden && v.def.hidden(s));
       if (v.navBtn.parentElement) v.navBtn.parentElement.hidden = hide;
-      if (hide && current === v) show(home(s), false);
+      // Hidden for the device now in session: its version of this page (shared/ui-kinds.js), else the start.
+      if (hide && current === v) { const twin = UI.webDev ? v.def.id : UI.pick(v.def.id, s); show(twin !== v.def.id ? twin : home(s), false); }
     }
     // A group with every tab hidden takes its gap with it.
     for (const v of views.values()) if (v.gap) v.gap.hidden = [...views.values()].every((x) => x.gap !== v.gap || !x.navBtn.parentElement || x.navBtn.parentElement.hidden);
+    const wdFirst = views.get('wd-overview'); // a web device's pages start the list: no gap above them
+    if (wdFirst && wdFirst.gap) wdFirst.gap.hidden = wdFirst.gap.hidden || !!UI.webDev;
     for (const v of views.values()) {
       let b = v.def.badge ? v.def.badge(s) : v.def.phase ? `P${v.def.phase}` : '';
-      if (b === 'on' && !linked(s)) b = 'warn'; // on, but nothing connected: it waits (yellow), it isn't working
+      if (b === 'on' && !linked(s) && !FeatureArt.FREE.includes(v.def.id)) b = 'warn'; // on, but nothing connected: it waits (yellow), it isn't working
       v.stateEl.className = `state${b === 'on' ? ' on' : b === 'warn' ? ' warn' : ''}`;
       v.stateEl.textContent = b === 'on' || b === 'warn' ? '' : tr(b || '');
     }
@@ -173,17 +204,29 @@
   function renderPcs(s) {
     const g = s.guest || { hosts: [] };
     const near = new Set((s.found || []).map((d) => d.id));
+<<<<<<< HEAD
     const c = s.client && s.client.os !== 'android' ? s.client : null;
     const seen = new Set();
     const list = [];
     for (const x of [...(s.paired || []), ...(g.hosts || [])]) {
       if (!x || seen.has(x.id) || x.os === 'android') continue;
+=======
+    const c = s.client && s.client.os !== 'android' && s.client.os !== 'ios' ? s.client : null;
+    const seen = new Set();
+    const list = [];
+    for (const x of [...(s.paired || []), ...(g.hosts || [])]) {
+      if (!x || seen.has(x.id) || x.os === 'android' || x.os === 'ios') continue;
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       seen.add(x.id);
       const connected = !!(c && c.id === x.id);
       if (!connected && !near.has(x.id)) continue;
       list.push({ id: x.id, name: x.name, os: x.os, connected, sub: connected ? (c.rttMs != null ? tr('{value} ms', { value: c.rttMs }) : tr('Connected')) : tr('Nearby · Click to connect'), go: () => api.pairWith(x.id) });
     }
+<<<<<<< HEAD
     UI.renderPcs($('pcs'), list, { open: () => show('overview', true), active: true });
+=======
+    UI.renderPcs($('pcs'), list, { open: () => show('overview', true), active: !UI.webDev });
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   function renderPhones(s) {
@@ -199,7 +242,7 @@
     }
     const info = ph.info || {};
     const colors = info.colors && info.colors.length ? info.colors : null;
-    const key = JSON.stringify([ph.nearby, ph.connecting, ph.connected && ph.connected.rttMs, ph.held, info.battery, info.charging, colors, UI.phoneWall ? UI.phoneWall.length : 0, current && current.def.id]);
+    const key = JSON.stringify([UI.webDev, ph.nearby, ph.connecting, ph.connected && ph.connected.rttMs, ph.held, info.battery, info.charging, colors, UI.phoneWall ? UI.phoneWall.length : 0, current && current.def.id]);
     if (key === phonesKey) return;
     phonesKey = key;
     $('phones').replaceChildren(...ph.nearby.map((d) => {
@@ -216,7 +259,11 @@
         d.connected ? el('span', { class: 'dot good' }) : ph.connecting && ph.connecting.id === d.id ? el('span', { class: 'spin', attrs: { 'aria-hidden': 'true' } }) : null,
       ]);
       b.dataset.connected = d.connected ? '1' : '';
+<<<<<<< HEAD
       b.classList.toggle('active', !!d.connected);
+=======
+      b.classList.toggle('active', !!d.connected && !UI.webDev);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       b.onclick = () => (d.connected ? show('overview', true) : api.connectPhone(d.id));
       return b;
     }));

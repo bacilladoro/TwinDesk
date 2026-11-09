@@ -37,7 +37,12 @@ UI.tab({
     const zoneHint = el('div', { class: 'hint', text: '' });
     const zone = el('div', { class: 'dropzone' }, [el('div', {}, [zoneText, zoneHint])]);
     const sendBtn = UI.button(I18n.t('Choose…'), () => api.chooseSendFiles(), 'small');
+<<<<<<< HEAD
     const sendRow = UI.row(I18n.t('Send files'), '', [sendBtn], { literal: true });
+=======
+    const cancelSendBtn = UI.button(I18n.t('Cancel'), () => api.cancelDrop(), 'small'); // the send on its way (as Recent's Cancel)
+    const sendRow = UI.row(I18n.t('Send files'), '', [cancelSendBtn, sendBtn], { literal: true });
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     const sendBar = el('div', { class: 'bar' }, [el('span')]);
     sendBar.hidden = true;
     sendRow.querySelector('.text').append(sendBar);
@@ -75,7 +80,11 @@ UI.tab({
       UI.card('', [keysRow, copyRow, pasteRow], { cls: 'keep-on' }),
       pair.el,
       UI.card('', [edgeRow, encryptRow]),
+<<<<<<< HEAD
       UI.card(I18n.t('Recent'), [outRow, inRow]),
+=======
+      UI.card(I18n.t('Recent'), [outRow, inRow], { actions: [UI.button(I18n.t('Clear'), () => api.clearFiles(), 'small')] }),
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     );
     const mb = (n) => (n / 1048576).toFixed(1) + ' MB';
     return (s) => {
@@ -92,6 +101,7 @@ UI.tab({
       sendBtn.disabled = !canSend;
       const b = f.batch;
       sendBar.hidden = !b;
+      cancelSendBtn.hidden = !b && !f.current;
       if (b) sendBar.firstChild.style.width = Math.floor((100 * b.sent) / Math.max(1, b.bytes)) + '%';
       sendRow.setHint(b ? I18n.t(b.kind === 'paste' ? 'Pasting {file} to {device}{progress}' : 'Sending {file} to {device}{progress}', { file: b.name, device: p.the, progress: b.files > 1 ? I18n.t(' · {index} of {count}', { index: b.index + 1, count: b.files }) : '' }) : canSend ? I18n.t('To {device}, or right-click files › Send to in the file manager', { device: p.the }) : '');
       // Shortcuts

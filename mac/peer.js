@@ -25,8 +25,17 @@ class Peer extends EventEmitter {
     // … and v2 (shared/fx2.js): through the files engine, a utility process with its own server.
     this.fx2 = fx2Off() ? null : new Fx2({ tls: server.tls });
     if (this.fx2) {
+<<<<<<< HEAD
       server.fx2Port = () => this.fx2.port;
       link.fx2Hello = () => this.fx2.client;
+=======
+      // The engine starts on demand: a session, another computer nearby (main.js), a socket coming
+      // in or a hello going out; the welcome waits for its port when it isn't up yet (server.js).
+      server.fx2Port = () => this.fx2.port;
+      server.fx2Wait = (ms) => this.fx2.whenReady(ms);
+      server.https.on('secureConnection', () => this.fx2.warm());
+      link.fx2Hello = () => { this.fx2.warm(); return this.fx2.client; };
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     }
     this.fx = new FastFiles({ session: () => this._fxSession(), deliver: (m) => this.current && this._deliver(m, this.current), send: (m) => this.sendNow(m), fx2: this.fx2 });
     server.fxOn = true;
@@ -50,6 +59,7 @@ class Peer extends EventEmitter {
     server.on('client', (ctx) => {
       if (!ctx.os) ctx.os = P.OS.WIN;
       ctx.role = 'guest';
+      if (this.fx2) this.fx2.need('host', true);
       this.fx.reset();
       if (this.il && !ctx.ilOn) this.il.stop();
       this.emit('client', ctx);
@@ -57,6 +67,10 @@ class Peer extends EventEmitter {
     server.on('closed', (ctx) => {
       if (ctx.authed) this.emit('closed', ctx);
       if (ctx.authed && !server.current) this.fx.reset();
+<<<<<<< HEAD
+=======
+      if (ctx.authed && !server.current && this.fx2) this.fx2.need('host', false);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       if (ctx.authed && !server.current && this.il && this.il.role === 'host') this.il.stop();
       if (!server.current) link.poke();
     });
@@ -67,11 +81,13 @@ class Peer extends EventEmitter {
     link.on('welcome', (ctx) => {
       this.swapIn = P.newRoleSwapState(ctx.name);
       this.swapOut = P.newRoleSwapState(ctx.name);
+      if (this.fx2) this.fx2.need('guest', true);
       this.fx.reset();
       if (this.il && !(ctx.il && this.il.accept(ctx.il, (ctx.ws && ctx.ws._socket && ctx.ws._socket.remoteAddress) || ctx.address))) this.il.stop();
       this.emit('client', ctx);
     });
     link.on('closed', (ctx) => {
+      if (this.fx2) this.fx2.need('guest', false);
       this.fx.reset();
       if (this.il && this.il.role === 'guest') this.il.stop();
       this.emit('closed', ctx);
@@ -102,7 +118,20 @@ class Peer extends EventEmitter {
   lane() {
     const c = this.current;
     if (!this.il || !this.il.started || !c || c.transport === 'ble') return null;
+<<<<<<< HEAD
     return this.il;
+=======
+    if (this.bleInput && this.server.current && this.bleInput.ready(c.ws, c.alt)) return null; // input through Bluetooth (#158)
+    return this.il;
+  }
+
+  // Cursor › Mouse and keyboard over Bluetooth (#158): shared/bleinput.js only while it's on. This Mac
+  // hosts it (its guest connects through Bluetooth first); as a guest it goes as before.
+  useBleInput(on) {
+    if (!!this.bleInput === !!on) return;
+    this.bleInput = on ? require('../shared/bleinput.js') : null;
+    this.server.bleInput = this.bleInput;
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   // The authenticated session: {deviceId, name, os, role ('guest' = they connected to us,
@@ -142,6 +171,7 @@ class Peer extends EventEmitter {
 
   _send(ctx, msg) {
     if (!ctx) return;
+    if (msg.t === P.T.FILE_CHUNK && ctx === this.current) this.fx.sentChunk();
     if (ctx === this.link.ctx) {
       for (const m of P.swapRole(msg, this.swapOut)) this.link.send(m);
     } else {

@@ -6,6 +6,11 @@
 // takes the session over (hello {resume}); the Bluetooth one stays as the fallback (alt).
 const WebSocket = require('ws');
 const P = require('../../shared/protocol.js');
+<<<<<<< HEAD
+=======
+const Tailnet = require('../../shared/tailnet.js'); // away from its network: its Tailscale address (#161)
+const Quiet = require('../../shared/quiet.js'); // idle sessions stop pinging every second (#143)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 const { linkLane, peerIp } = require('../../shared/inputlane.js');
 
 const T = P.T;
@@ -32,6 +37,7 @@ class Link {
     this.device = opts.device;
     this.blocked = opts.blocked || (() => false);
     this.busy = opts.busy || (() => true);
+    this.partner = opts.partner || (() => false); // input shared over this link: it never goes quiet (shared/quiet.js)
     this.destroyed = false;
     this.ilLane = linkLane(); // the input lane (shared/inputlane.js) of this device's sessions; null: none
     this.lastTx = 0;
@@ -79,6 +85,7 @@ class Link {
 
   send(obj) {
     if (!this.authed || !this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    Quiet.sent(this.ws, obj);
     this.ws.send(JSON.stringify(obj));
     this.lastTx = this.ws.lastTx = Date.now();
     return true;
@@ -183,7 +190,9 @@ class Link {
     if (mode === 'session' && this.blocked()) return this._scheduleReconnect(); // hosting: try again later
     this.mode = mode;
     this.nw = this.nm = null;
-    const target = mode === 'pair' ? this.pairState : this.pairing;
+    let target = mode === 'pair' ? this.pairState : this.pairing;
+    if (mode === 'session' && this.dialAt) target = { ...target, address: this.dialAt }; // this attempt only (Tailnet.pick)
+    this.dialAt = '';
     const seq = ++this.seq;
     // Bluetooth: a host met there (pairing), or a paired one that isn't on the network but is near.
     const hostId = mode === 'pair' ? target.id : target.macId;
@@ -343,6 +352,7 @@ class Link {
     }
     if (!msg || typeof msg.t !== 'string') return;
     this.lastRx = Date.now();
+    if (this.authed && Quiet.seen(ws, msg)) return; // `idle {on}`: the other end's side of a quiet link
     switch (msg.t) {
       case T.PAIR_NONCE: return this._onNonce(msg);
       case T.PAIR_OK: return this._onPairOk(msg);
@@ -404,6 +414,8 @@ class Link {
     clearTimeout(this.timers.hello);
     this.authed = true;
     this.attempt = 0;
+    const tail = Tailnet.clean(msg.tail); // its Tailscale addresses (none: older, or not on it)
+    if (!Tailnet.same(tail, this.pairing.tail) && (tail.length || this.pairing.tail)) { this.pairing.tail = tail; this.store.save(this.pairing); }
     this.resumeKey = typeof msg.resume === 'string' ? msg.resume : ''; // older hosts: none, no moving
     this.resumeAt = 0;
     const os = osOf(msg.os || this.pairing.os);
@@ -415,6 +427,7 @@ class Link {
     this.status.rtt = null;
     this.lastTx = Date.now();
     this.timers.ping = setInterval(() => this._keepalive(), KEEPALIVE_TICK_MS);
+    if (!this.unquiet) this.unquiet = Quiet.onChange(() => { if (this.authed) this._keepalive(); }); // a hold reaches the other end at once
     this.takeover = false;
     this.busyBy = '';
     this._setStatus('connected', '');
@@ -503,6 +516,9 @@ class Link {
         this.pairing.port = seen.port;
         this.store.save(this.pairing);
       }
+      // Not seen here: every other attempt through Tailscale, when both are on it.
+      const at = Tailnet.pick({ address: this.pairing.address, seen, tail: this.pairing.tail, attempt: this.attempt });
+      this.dialAt = at !== this.pairing.address ? at : '';
       this._connect('session');
     }, delay);
   }
@@ -547,7 +563,17 @@ class Link {
     for (const ws of [this.ws, this.alt]) {
       if (!ws || !ws.transport) continue;
       const ble = ws.transport === 'ble';
-      const rx = Math.max(ws.lastRx || 0, (ble && this.ble && this.ble.lastDown) || 0);
+      let rx = Math.max(ws.lastRx || 0, (ble && this.ble && this.ble.lastDown) || 0);
+      // Quiet links (shared/quiet.js): both ends idle, a ping every few minutes. Not through Bluetooth.
+      if (!ble && ws.readyState === WebSocket.OPEN) {
+        const q = Quiet.tick(ws, now, rx, (m) => { ws.send(JSON.stringify(m)); ws.lastTx = Date.now(); }, this.partner());
+        if (q.quiet) {
+          if (q.dead) { if (ws === this.ws) this.lastError = '{Name} stopped answering'; ws.terminate(); }
+          else if (q.ping) { ws.lastPing = now; ws.lastTx = now; ws.send(JSON.stringify({ t: T.PING, ts: now })); }
+          continue;
+        }
+        rx = q.rx;
+      }
       if (now - rx > (ble ? P.BLE_TIMEOUT_MS : busy ? P.TIMEOUT_MS : P.IDLE_TIMEOUT_MS)) {
         if (ws === this.ws) this.lastError = '{Name} stopped answering';
         ws.terminate();

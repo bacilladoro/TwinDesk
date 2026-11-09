@@ -12,17 +12,32 @@
 'use strict';
 
 (() => {
+<<<<<<< HEAD
   const send = (m) => TD.send(JSON.stringify(m));
+=======
+  // Voice typing's keys and text say so: the computer takes them by its Keyboard switch, not Remote's.
+  const send = (m) => TD.send(JSON.stringify(opts.mode === 'voice' && /^remote\.(kd|ku|text)$/.test(m.t) ? { ...m, voice: true } : m));
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   // Moves and wheel steps straight to the socket (WebHost's TD.move): no object or JSON per frame.
   const hot = typeof TD.move === 'function';
   const tick = () => { try { TD.tick(); } catch (_) { /* older app */ } };
   const $ = (id) => document.getElementById(id);
-  let opts = { mode: 'pad', name: 'the computer', me: 'this device', connected: true, os: '', ble: false, speed: 1, tap: true, smooth: true, pad: {}, controls: [], keys: [] };
+  // The app's language (I18n.kt through TD.tr): {name} parts filled from vars, English without the app.
+  const t = (text, vars = {}) => (typeof TD.tr === 'function' ? TD.tr(text, JSON.stringify(vars))
+    : text.replace(/^[^|]*\|/, '').replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)));
+  for (const e of document.querySelectorAll('[data-i18n]')) e.textContent = t(e.dataset.i18n || e.textContent);
+  for (const e of document.querySelectorAll('[aria-label]')) e.setAttribute('aria-label', t(e.getAttribute('aria-label')));
+  for (const e of document.querySelectorAll('[placeholder]')) e.placeholder = t(e.placeholder);
+  let opts = { mode: 'pad', name: t('the computer'), me: t('this device'), connected: true, os: '', ble: false, speed: 1, tap: true, smooth: true, pad: {}, controls: [], keys: [] };
   let allowed = null; // the computer's remote.state
   let why = ''; // …and why it doesn't take it now
   let off = false; // …because its Remote is off: Turn on, here
   let real = false; // the computer takes the gamepad as a real one (remote.pad)
   let canText = false; // the computer types characters no key there types (remote.state text: remote.text)
+  let voiceOk = null; // the computer takes voice typing (its Keyboard switch; remote.state voice), null: it doesn't say (older)
+  let voiceWhy = ''; // …and why not
+  const keyboardOff = () => voiceOk === false && /^Keyboard is off/.test(voiceWhy);
+  const voiceBlocked = () => !opts.connected || (voiceOk === null ? allowed === false : !voiceOk);
   const asPad = () => opts.bt === true || real; // the gamepad as a real one, here or through Bluetooth
 
   // ---- keys and buttons held down: counted (two controls may press the same key), all let go on close ----
@@ -53,25 +68,34 @@
   // ---- what the page shows ----
   function render() {
     const game = opts.mode === 'gamepad';
+    const voice = opts.mode === 'voice';
     document.body.classList.toggle('gamepad', game);
-    document.body.classList.toggle('pad', !game);
-    $('name').textContent = game && opts.bt ? `Bluetooth gamepad · ${opts.btName || 'connected'}`
-      : `${game ? (real ? 'Gamepad (real)' : 'Gamepad') : 'Touchpad'} · ${opts.name}`;
+    document.body.classList.toggle('voice', voice);
+    document.body.classList.toggle('pad', !game && !voice);
+    const name = opts.name, me = opts.me;
+    $('name').textContent = game && opts.bt ? t('Bluetooth gamepad · {name}', { name: opts.btName || t('connected') })
+      : `${game ? (real ? t('Gamepad (real)') : t('Gamepad')) : voice ? t('Voice typing') : t('Touchpad')} · ${name}`;
+    if (voice) voiceStatus();
     const note = game && opts.bt ? ''
-      : !opts.connected ? `Not connected to ${opts.name}. Connect from TwinDesk’s Overview.`
-      : allowed === false && off ? `Remote is off on ${opts.name}.`
-      : allowed === false ? (why || `${opts.name} doesn’t take input from ${opts.me}. On ${opts.name}, turn on Remote in TwinDesk.`)
-        : allowed === null && (opts.os === 'mac' || opts.os === 'linux') ? `${opts.name} doesn’t answer the remote: update TwinDesk there.`
+      : !opts.connected ? t('Not connected to {name}. Connect from TwinDesk’s Overview.', { name })
+      : voice && keyboardOff() ? t('Keyboard is off on {name}: voice typing types there with it. Turn it on in TwinDesk’s Keyboard page there, or here.', { name })
+      : voice && voiceOk === false ? (voiceWhy || t('Not typing on {name}.', { name }))
+      : voice && voiceOk === true ? ''
+      : allowed === false && off ? t('Remote is off on {name}.', { name })
+      : allowed === false ? (why || t('{name} doesn’t take input from {me}. On {name}, turn on Remote in TwinDesk.', { name, me }))
+        : allowed === null && (opts.os === 'mac' || opts.os === 'linux') ? t('{name} doesn’t answer the remote: update TwinDesk there.', { name })
           : '';
     $('note-text').textContent = note;
     $('note').hidden = !note;
-    $('note-on').hidden = !(note && allowed === false && off && opts.connected);
+    const turnOn = voice && voiceOk !== null ? keyboardOff() : allowed === false && off;
+    $('note-on').textContent = voice && voiceOk !== null ? t('Turn on Keyboard') : t('Turn on Remote');
+    $('note-on').hidden = !(note && turnOn && opts.connected);
     // A real controller: what the computer sees it as.
     const sees = !game ? ''
-      : opts.bt ? `${opts.btName || 'The computer'} sees ${opts.me} as “TwinDesk Gamepad”, a Bluetooth game controller`
-        : real && opts.os === 'win' ? `Windows sees it as an Xbox 360 Controller: games take it as one (joy.cpl lists it under Game Controllers)`
-          : real && opts.os === 'linux' ? `${opts.name} sees it as “TwinDesk Gamepad”, an Xbox 360 controller`
-            : real ? `${opts.name} sees it as a game controller` : '';
+      : opts.bt ? t('{name} sees {me} as “TwinDesk Gamepad”, a Bluetooth game controller', { name: opts.btName || t('The computer'), me })
+        : real && opts.os === 'win' ? t('Windows sees it as an Xbox 360 Controller: games take it as one (joy.cpl lists it under Game Controllers)')
+          : real && opts.os === 'linux' ? t('{name} sees it as “TwinDesk Gamepad”, an Xbox 360 controller', { name })
+            : real ? t('{name} sees it as a game controller', { name }) : '';
     $('pad-note').textContent = sees;
     $('pad-note').hidden = !sees;
     if (!$('map').hidden) mapFill();
@@ -91,10 +115,10 @@
       list.append(row);
     }
     $('map-hint').textContent = asPad()
-      ? 'It’s a real controller now: these keys are what it presses when it isn’t (Real gamepad off on the computer, not as a Bluetooth gamepad).'
-      : 'What each control presses on the computer. The left stick is four keys; the right stick moves the mouse.';
+      ? t('It’s a real controller now: these keys are what it presses when it isn’t (Real gamepad off on the computer, not as a Bluetooth gamepad).')
+      : t('What each control presses on the computer. The left stick is four keys; the right stick moves the mouse.');
   }
-  $('b-map').onclick = () => { releaseAll(); mapFill(); $('map').hidden = false; };
+  $('b-map').onclick = () => { releaseAll(); editEnd(); mapFill(); $('map').hidden = false; };
   $('map-done').onclick = () => { $('map').hidden = true; };
   $('map-reset').onclick = () => TD.event('padReset');
 
@@ -102,14 +126,17 @@
     if (m.t === 'opts') {
       if ((m.bt === true) !== (opts.bt === true)) releaseAll(); // what's held goes the old way
       opts = { ...opts, ...m };
-      if (!opts.connected && !opts.bt) { allowed = null; releaseAll(); }
+      if (m.layout && !layoutIn) { layoutIn = true; layoutApply(m.layout); }
+      if (!opts.connected && !opts.bt) { allowed = null; voiceOk = null; releaseAll(); }
       if (opts.bt || !opts.connected) canText = false; // a Bluetooth keyboard has only keys
     } else if (m.t === 'remote.state') {
       allowed = m.allowed === true;
       why = typeof m.why === 'string' ? m.why : '';
       off = m.off === true;
       canText = m.text === true && !opts.bt;
-      if (!allowed) releaseAll();
+      voiceOk = typeof m.voice === 'boolean' ? m.voice : null;
+      voiceWhy = typeof m.voiceWhy === 'string' ? m.voiceWhy : '';
+      if (opts.mode === 'voice' ? voiceBlocked() : !allowed) releaseAll();
       if ((m.pad === true) !== real) { releaseAll(); real = m.pad === true; } // what's held goes the old way
     } else return;
     render();
@@ -117,11 +144,12 @@
 
   $('b-close').onclick = () => { releaseAll(); TD.event('close'); };
   // The computer's Remote switch, turned on from here: our out is its in (pair.sync, its pairsync.js).
-  $('note-on').onclick = () => send({ t: 'pair.sync', feature: 'remote', dir: 'out', on: true });
+  $('note-on').onclick = () => send(opts.mode === 'voice' && voiceOk !== null ? { t: 'pair.sync', key: 'keyboard', value: true } // Share Keyboard: one switch for both sides
+    : { t: 'pair.sync', feature: 'remote', dir: 'out', on: true });
   // The touchpad held sideways (or upright again): the activity turns, the page follows.
   $('b-rotate').onclick = () => TD.event('rotate');
   document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
-  window.addEventListener('contextmenu', (e) => e.preventDefault());
+  window.addEventListener('contextmenu', (e) => { if (e.target !== vbox) e.preventDefault(); }); // the voice box keeps its own (select, paste)
 
   // ---- pointer movement and scrolling: added up and sent once a frame (through Bluetooth, where
   // every message is a round trip on the radio, about 30 times a second) ----
@@ -354,15 +382,84 @@
     sync();
     if (!e.isComposing && !composing) settle();
   });
+  // ---- voice typing: the keyboard's own dictation (Gboard's microphone, iOS Dictation) writes into
+  // a real box, and the box is mirrored on the computer as it changes: the same difference as the
+  // keyboard above (Backspaces for what went, then what came), so a word the dictation fixes is fixed
+  // there too, letter by letter. The box keeps its words (they're what the next change is measured
+  // against) until Clear, which starts afresh without touching what the computer has. ----
+  const vbox = $('voice');
+  let vsent = '';
+  let vlast = 0;
+  function voiceSync() {
+    const v = vbox.value;
+    let i = 0;
+    while (i < vsent.length && i < v.length && vsent[i] === v[i]) i++;
+    const low = (c) => /[\udc00-\udfff]/.test(c || '');
+    while (i > 0 && (low(v[i]) || low(vsent[i]))) i--;
+    let gone = 0;
+    for (const ch of vsent.slice(i)) if (keyFor(ch) || asText(ch)) gone++;
+    for (let k = 0; k < gone; k++) type('Backspace', false);
+    let text = '';
+    const flush = () => { if (text) send({ t: 'remote.text', text }); text = ''; };
+    for (const ch of v.slice(i)) {
+      const k = keyFor(ch);
+      if (k) { flush(); type(k.code, k.shift); } else if (asText(ch)) { text += ch; if (text.length >= 60) flush(); }
+    }
+    flush();
+    if (v !== vsent) { vlast = Date.now(); tick(); }
+    vsent = v;
+    voiceStatus();
+  }
+  function voiceClear() { vbox.value = ''; vsent = ''; voiceStatus(); vbox.focus(); }
+  function voiceStatus() {
+    const dot = $('voice-dot');
+    const hint = $('voice-hint');
+    if (!dot) return;
+    const blocked = voiceBlocked();
+    const live = !blocked && Date.now() - vlast < 1500;
+    dot.className = blocked ? 'bad' : live ? 'live' : '';
+    const words = vbox.value.trim() ? vbox.value.trim().split(/\s+/).length : 0;
+    const name = opts.name;
+    hint.textContent = blocked ? (keyboardOff() ? t('Keyboard is off on {name}', { name }) : t('Not typing on {name}', { name })) : live ? t('Typing on {name}…', { name })
+      : words === 1 ? t('1 word typed on {name}', { name }) : words ? t('{count} words typed on {name}', { count: words, name })
+        : t('Click where you want to type on {name}, then speak', { name });
+  }
+  setInterval(() => { if (opts.mode === 'voice') voiceStatus(); }, 700);
+  vbox.addEventListener('input', voiceSync);
+  vbox.addEventListener('compositionend', voiceSync);
+  // A key the box can't send by changing: Backspace with nothing left in it goes to the computer.
+  vbox.addEventListener('keydown', (e) => {
+    if ((e.key === 'Backspace' || e.keyCode === 8) && !vbox.value) { e.preventDefault(); type('Backspace', false); }
+  });
+  const vkey = (id, fn) => {
+    $(id).addEventListener('pointerdown', (e) => e.preventDefault()); // the keyboard (and its microphone) stays up
+    $(id).addEventListener('click', () => { tick(); fn(); });
+  };
+  // Enter: sent, and the box starts afresh (a message sent, a line done).
+  vkey('v-enter', () => { voiceSync(); type('Enter', false); vbox.value = ''; vsent = ''; voiceStatus(); });
+  vkey('v-space', () => { vbox.setRangeText(' ', vbox.selectionStart, vbox.selectionEnd, 'end'); voiceSync(); });
+  vkey('v-tab', () => type('Tab', false));
+  // The last word, here and there.
+  vkey('v-word', () => {
+    if (!vbox.value) { press('ControlLeft', true); tapKey('Backspace'); press('ControlLeft', false); return; }
+    vbox.value = vbox.value.replace(/\S*\s*$/, '');
+    voiceSync();
+  });
+  vkey('v-clear', voiceClear);
+  // Opened (the Overview's Voice typing): the box takes the keyboard straight away.
+  setTimeout(() => { if (opts.mode === 'voice') { vbox.focus(); TD.event('keyboard'); } }, 250);
+
   // A hardware keyboard on the phone (and the soft keyboard's Backspace or Enter on an empty field):
   // its keys as they are; the field doesn't change, so nothing is sent twice.
   const keyCode = (e) => e.code || ({ Backspace: 'Backspace', Enter: 'Enter' })[e.key] || '';
   window.addEventListener('keydown', (e) => {
+    if (editing || e.target === vbox) return; // typing a button's label (Edit), or into the voice box (its own changes go)
     if (!keyCode(e) || e.keyCode === 229 || e.isComposing || e.repeat) return; // composing: see input
     e.preventDefault();
     press(keyCode(e), true);
   });
   window.addEventListener('keyup', (e) => {
+    if (editing || e.target === vbox) return; // typing a button's label (Edit), or into the voice box
     if (!keyCode(e) || e.keyCode === 229 || e.isComposing) return;
     e.preventDefault();
     press(keyCode(e), false);
@@ -399,9 +496,11 @@
     if (id in BIT) padSet('b', down ? gp.b | (1 << BIT[id]) : gp.b & ~(1 << BIT[id]));
   }
 
-  // A button: its key, or as a real gamepad's button; let go the way it was pressed.
-  for (const el of document.querySelectorAll('#game button[data-id]')) {
+  // A button: its key, or as a real gamepad's button; let go the way it was pressed. A button of
+  // the person's own (Edit › + Button) presses its key either way.
+  function bindButton(el) {
     const id = el.dataset.id;
+    const custom = el.classList.contains('custom');
     let pressed = null; // the key, or true (the real gamepad's)
     const up = () => {
       if (pressed == null) return;
@@ -413,7 +512,7 @@
       e.preventDefault();
       el.setPointerCapture(e.pointerId);
       if (pressed != null) return;
-      pressed = asPad() ? true : padKey(id);
+      pressed = custom ? (el.dataset.key || '') : asPad() ? true : padKey(id);
       el.classList.add('down');
       if (pressed === true) padButton(id, true); else press(pressed, true);
       tick();
@@ -421,6 +520,7 @@
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
   }
+  for (const el of document.querySelectorAll('#game button[data-id]')) bindButton(el);
 
   // A stick: where the finger is from its middle, -1..1 each way.
   function stick(el, onMove) {
@@ -487,6 +587,195 @@
     rs = { x, y };
     if (!rsFrame && Math.hypot(x, y) >= 0.12) rsFrame = requestAnimationFrame(rsStep);
   });
+
+  // ---- editing the gamepad (Edit): move, size, hide, rename and set the key of any control; add
+  // buttons of your own. The layout: {items: {id: {x, y, s, hide, label}}, custom: [{id, label, key, x, y, s, hide}]},
+  // x and y the control's middle as a share of the screen (kept by Remote.kt, TD.setLayout). ----
+  const UNITS = { lt: 'LT', lb: 'LB', rb: 'RB', rt: 'RT', back: t('gamepad|Back'), start: t('gamepad|Start'), ls: t('Left stick'), rs: t('Right stick'), dpad: t('D-pad'), abxy: 'A B X Y', l3: 'L3', r3: 'R3' };
+  const KEYED = ['lt', 'lb', 'rb', 'rt', 'back', 'start', 'l3', 'r3']; // one button, one key
+  let layout = { items: {}, custom: [] };
+  let layoutIn = false; // the saved one is applied once (opts come again on every change)
+  let editing = false;
+  let sel = null; // the selected control's id
+  const unitEl = (id) => $(`g-${id}`) || $(id) || document.querySelector(`#game [data-unit="${id}"]`);
+  for (const id of Object.keys(UNITS)) {
+    const el = unitEl(id);
+    el.dataset.unit = id;
+    el.dataset.def = el.textContent;
+  }
+  const isCustom = (id) => layout.custom.some((c) => c.id === id);
+  const itemOf = (id) => layout.custom.find((c) => c.id === id) || (layout.items[id] = layout.items[id] || {});
+  const clamp = (v) => Math.max(0.02, Math.min(0.98, v));
+
+  function place(el, it) {
+    const at = typeof it.x === 'number' && typeof it.y === 'number';
+    el.style.left = at ? `${clamp(it.x) * 100}vw` : '';
+    el.style.top = at ? `${clamp(it.y) * 100}vh` : '';
+    el.style.right = at ? 'auto' : '';
+    el.style.bottom = at ? 'auto' : '';
+    const s = Number(it.s) || 1;
+    el.style.transform = `${at ? 'translate(-50%, -50%) ' : ''}${s !== 1 ? `scale(${s})` : ''}`.trim();
+    el.classList.toggle('off', it.hide === true);
+    if (el.tagName === 'BUTTON' && !(el.id === 'dpad' || el.id === 'abxy')) el.textContent = (typeof it.label === 'string' && it.label) || el.dataset.def || '';
+  }
+
+  function makeCustom(c) {
+    const el = document.createElement('button');
+    el.className = 'g custom';
+    el.dataset.id = c.id;
+    el.dataset.unit = c.id;
+    el.dataset.key = c.key || '';
+    el.dataset.def = 'Btn';
+    $('game').append(el);
+    bindButton(el);
+    place(el, c);
+    return el;
+  }
+
+  function layoutApply(l) {
+    for (const el of document.querySelectorAll('#game .custom')) el.remove();
+    const items = l && typeof l.items === 'object' && l.items ? l.items : {};
+    const custom = Array.isArray(l && l.custom) ? l.custom.filter((c) => c && typeof c.id === 'string').slice(0, 24) : [];
+    layout = { items: {}, custom };
+    for (const id of Object.keys(UNITS)) {
+      layout.items[id] = typeof items[id] === 'object' && items[id] ? items[id] : {};
+      place(unitEl(id), layout.items[id]);
+    }
+    for (const c of custom) makeCustom(c);
+  }
+  const save = () => { try { TD.setLayout(JSON.stringify(layout)); } catch (_) { /* older app */ } };
+
+  // The bar under a selected control: its size, key, label, Hide (or Show), Delete (one of yours).
+  function select(id) {
+    for (const el of document.querySelectorAll('#game [data-unit].sel')) el.classList.remove('sel');
+    sel = id;
+    $('edit-bar').hidden = !id;
+    if (!id) return;
+    const el = unitEl(id);
+    el.classList.add('sel');
+    const it = itemOf(id);
+    const custom = isCustom(id);
+    $('edit-name').textContent = custom ? (it.label || t('Button')) : UNITS[id];
+    $('edit-size').value = String(Number(it.s) || 1);
+    const keyed = custom || KEYED.includes(id);
+    $('edit-key-row').hidden = !keyed;
+    $('edit-label-row').hidden = !keyed;
+    if (keyed) {
+      const k = $('edit-key');
+      if (!k.options.length) for (const [code, name] of opts.keys || []) k.add(new Option(name, code));
+      k.value = custom ? (it.key || '') : padKey(id);
+      $('edit-label').value = (typeof it.label === 'string' && it.label) || el.dataset.def || '';
+    }
+    $('edit-hide').textContent = it.hide ? t('Show') : t('Hide');
+    $('edit-del').hidden = !custom;
+  }
+
+  $('edit-size').oninput = () => {
+    if (!sel) return;
+    const it = itemOf(sel);
+    it.s = Number($('edit-size').value) || 1;
+    place(unitEl(sel), it);
+  };
+  $('edit-size').onchange = save;
+  $('edit-key').onchange = () => {
+    if (!sel) return;
+    const code = $('edit-key').value;
+    if (isCustom(sel)) { itemOf(sel).key = code; unitEl(sel).dataset.key = code; save(); }
+    else { TD.setPad(sel, code); opts.pad = { ...opts.pad, [sel]: code }; }
+  };
+  $('edit-label').oninput = () => {
+    if (!sel) return;
+    const it = itemOf(sel);
+    it.label = $('edit-label').value.slice(0, 12);
+    place(unitEl(sel), it);
+    if (isCustom(sel)) $('edit-name').textContent = it.label || t('Button');
+  };
+  $('edit-label').onchange = save;
+  $('edit-hide').onclick = () => {
+    if (!sel) return;
+    const it = itemOf(sel);
+    it.hide = !it.hide;
+    place(unitEl(sel), it);
+    $('edit-hide').textContent = it.hide ? t('Show') : t('Hide');
+    save();
+  };
+  $('edit-del').onclick = () => {
+    if (!sel || !isCustom(sel)) return;
+    unitEl(sel).remove();
+    layout.custom = layout.custom.filter((c) => c.id !== sel);
+    select(null);
+    save();
+  };
+  $('edit-add').onclick = () => {
+    if (layout.custom.length >= 24) return;
+    const c = { id: `c${Date.now().toString(36)}`, label: 'Btn', key: '', x: 0.5, y: 0.55, s: 1 };
+    layout.custom.push(c);
+    makeCustom(c);
+    select(c.id);
+    save();
+  };
+  $('edit-reset').onclick = () => {
+    layoutApply({ items: {}, custom: [] });
+    select(null);
+    save();
+  };
+
+  function editStart() {
+    releaseAll();
+    $('map').hidden = true;
+    editing = true;
+    document.body.classList.add('editing');
+    $('edit-top').hidden = false;
+  }
+  function editEnd() {
+    if (!editing) return;
+    editing = false;
+    select(null);
+    document.body.classList.remove('editing');
+    $('edit-top').hidden = true;
+    $('edit-bar').hidden = true;
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+  $('b-edit').onclick = editStart;
+  $('edit-done').onclick = editEnd;
+
+  // While editing, a touch on a control moves it (or, without moving, selects it) and presses nothing:
+  // caught on its way down to the control, before the control's own handlers.
+  const game = $('game');
+  let drag = null; // {id, el, pid, sx, sy, cx, cy, moved}
+  game.addEventListener('pointerdown', (e) => {
+    if (!editing) return;
+    e.stopPropagation();
+    e.preventDefault();
+    if (drag) return;
+    const el = e.target.closest('[data-unit]');
+    if (!el) return select(null);
+    const r = el.getBoundingClientRect();
+    drag = { id: el.dataset.unit, el, pid: e.pointerId, sx: e.clientX, sy: e.clientY, cx: r.left + r.width / 2, cy: r.top + r.height / 2, moved: false };
+    try { game.setPointerCapture(e.pointerId); } catch (_) { /* gone */ }
+  }, true);
+  game.addEventListener('pointermove', (e) => {
+    if (!editing) return;
+    e.stopPropagation();
+    if (!drag || e.pointerId !== drag.pid) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+    drag.moved = true;
+    const it = itemOf(drag.id);
+    it.x = clamp((drag.cx + dx) / window.innerWidth);
+    it.y = clamp((drag.cy + dy) / window.innerHeight);
+    place(drag.el, it);
+  }, true);
+  const dragEnd = (e) => {
+    if (!editing) return;
+    e.stopPropagation();
+    if (!drag || e.pointerId !== drag.pid) return;
+    const d = drag;
+    drag = null;
+    if (d.moved) { save(); if (sel !== d.id) select(d.id); } else select(d.id);
+  };
+  game.addEventListener('pointerup', dragEnd, true);
+  game.addEventListener('pointercancel', dragEnd, true);
 
   render();
   TD.ready();

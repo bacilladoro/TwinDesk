@@ -41,6 +41,30 @@ class Notifs(core: Core) : Feature(core) {
         core.changed()
     }
 
+<<<<<<< HEAD
+=======
+    // Notifications › Apps: a block list (every app but the ones switched off: the muted set, as
+    // before) or an allow list (only the ones switched on), over every app on the phone (AppList).
+    val allowMode: Boolean get() = core.store.prefsString("notifs.filter", "block") == "allow"
+    fun setAllowMode(on: Boolean) { core.store.setPrefsString("notifs.filter", if (on) "allow" else "block"); core.changed() }
+    private val allowed get() = core.store.prefsSet("notifs.allowed")
+    fun isAllowed(pkg: String) = pkg in allowed
+    fun setAllowed(pkg: String, on: Boolean) {
+        core.store.setPrefsSet("notifs.allowed", if (on) allowed + pkg else allowed - pkg)
+        core.changed()
+    }
+    // Whether this app's notifications go to the computer.
+    fun sends(pkg: String) = if (allowMode) pkg in allowed else pkg !in muted
+    // The list's switch: on = its notifications go.
+    fun setSends(pkg: String, on: Boolean) = if (allowMode) setAllowed(pkg, on) else setMuted(pkg, !on)
+    // Every app at once (the list's All and None).
+    fun setAll(pkgs: Collection<String>, on: Boolean) {
+        if (allowMode) core.store.setPrefsSet("notifs.allowed", if (on) allowed + pkgs else allowed - pkgs.toSet())
+        else core.store.setPrefsSet("notifs.muted", if (on) muted - pkgs.toSet() else muted + pkgs)
+        core.changed()
+    }
+
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     private fun seen(pkg: String) {
         val all = core.store.prefsSet("notifs.apps")
         if (pkg in all) return
@@ -102,6 +126,10 @@ class Notifs(core: Core) : Feature(core) {
     }
 
     // Extract title from standard, big title, conversation title, etc.
+    fun titleOf(x: Bundle) = extractTitle(x)
+    fun textOf(x: Bundle) = extractText(x)
+    fun appName(pkg: String) = appNameOf(pkg)
+
     private fun extractTitle(x: Bundle): String {
         return (x.getCharSequence(Notification.EXTRA_TITLE)
             ?: x.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)
@@ -236,6 +264,7 @@ class Notifs(core: Core) : Feature(core) {
     // From NotifListener: a new notification on this phone.
     fun posted(sbn: StatusBarNotification) {
         runCatching { chatPosted(sbn) }
+        runCatching { core.peer.notifPosted(sbn, this) } // and to a phone connected with Connect with Android (Peer.kt)
         if (!peerAccepts || !core.sync.get("notifs", "out") || !core.link.connected) return
         val n = sbn.notification ?: return
         val pkg = sbn.packageName
@@ -245,7 +274,11 @@ class Notifs(core: Core) : Feature(core) {
         if (n.category == Notification.CATEGORY_TRANSPORT || n.category == Notification.CATEGORY_PROGRESS || n.category == Notification.CATEGORY_SERVICE) return
         if (n.category == Notification.CATEGORY_CALL && core.hub.callsOn) return // the computer shows the call itself
         seen(pkg)
+<<<<<<< HEAD
         if (pkg in muted) return
+=======
+        if (!sends(pkg)) return
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
         val x = n.extras
         val title = extractTitle(x)
@@ -322,7 +355,7 @@ class Notifs(core: Core) : Feature(core) {
                 val app = m.str("appName", 80).ifEmpty { m.str("app", 80) }
                 val title = m.str("title", 300)
                 val body = listOf(m.str("subtitle", 200), m.str("body", 1000)).filter { it.isNotEmpty() }.joinToString("\n")
-                Notify.fromComputer(core.ctx, m.str("id", 200), app, title, body, core.host?.name ?: "Computer", iconIn(m))
+                Notify.fromComputer(core.ctx, m.str("id", 200), app, title, body, core.host?.name ?: tr("Computer"), iconIn(m))
                 shown++
             }
             // An answer typed on the computer (Overview, Messages' chat apps): through the app's own Reply.

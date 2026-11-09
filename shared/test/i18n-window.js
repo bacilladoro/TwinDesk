@@ -54,9 +54,9 @@ async function testMode(mode) {
   const push = () => win.webContents.send('state', { ...state, ui: settings.ui });
   const mainSource = fs.readFileSync(path.join(dir, 'main.js'), 'utf8');
   const reloadCode = mainSource.slice(mainSource.indexOf('function changeLanguage()'), mainSource.indexOf('function saveBounds()'));
-  const reload = vm.createContext({ I18n, settings, BrowserWindow, app: { getLocale: () => 'zh-CN' },
-    i18n: I18n.create('en'), trayKey: '', updateTray() {}, mainWin: win, path, __dirname: dir,
-  });
+  // A new language restarts TwinDesk: the real handler relaunches and quits; the "restarted" app
+  // opens the settings window in the saved language, as startup does.
+  const reload = vm.createContext({ process: { argv: ['TwinDesk.exe'] }, app: { relaunch() {}, quit: () => win.loadFile(path.join(dir, 'app.html'), { query: { language: settings.ui.language } }) } });
   const ctx = {
     settings,
     buildState: () => ({ ...state, ui: settings.ui }),
@@ -229,9 +229,10 @@ async function testMode(mode) {
     state.notifs = { ...state.notifs, receive: true, history: [{ id: 'n', at: 1, appName: 'App {me}', title: 'User title', body: 'literal {name} 123456' }] };
     state.clipboard = { ...state.clipboard, enabled: true, history: [{ at: 1, dir: 'in', text: 'literal {me}' }] };
     push(); await delay(80);
-    assert.ok(await read('document.querySelector("#page-overview").textContent.includes("literal {name} 123456")'));
-    assert.ok(await read('document.querySelector("#page-overview").textContent.includes("literal {me}")'));
-    assert.ok(await read('document.querySelector("#page-overview h1").textContent.includes("Work {me} $&")'));
+    // A phone's own Overview (shared/ui-device-android.js), in Overview's place.
+    assert.ok(await read('document.querySelector("#page-android-overview").textContent.includes("literal {name} 123456")'));
+    assert.ok(await read('document.querySelector("#page-android-overview").textContent.includes("literal {me}")'));
+    assert.ok(await read('document.querySelector("#page-android-overview h1").textContent.includes("Work {me} $&")'));
     await inspectPages('phone');
     assert.deepStrictEqual(errors, [], 'actual renderer must not throw');
     assert.ok(introductions.size >= (mode === 'linux/mesh' ? 7 : 8), 'the test inspects feature introductions as well as settings'); // Linux's Multi-device has fewer pages

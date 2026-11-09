@@ -28,7 +28,13 @@ function render(locale) {
     switch: (change, options) => ({ change, ...options, set(value) { this.value = value; }, disable() {} }),
     select: (options, change) => el('select', { options, change, set(value) { this.value = value; } }),
     mediaControlsRow: () => ({ el: el('media'), update() {} }),
+<<<<<<< HEAD
     // shared/ui-look.js
+=======
+    enginesRows: () => ({ rows: [], update() {} }), // shared/ui-engines.js
+    // shared/ui-look.js
+    styleRow: () => Object.assign(el('row'), { render() {} }),
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     themeRow: () => Object.assign(el('row'), { render() {} }),
     accentRow: () => Object.assign(el('row'), { render() {} }),
     sections: (cards) => Object.assign(el('sections', {}, cards), { spy() {} }),
@@ -49,7 +55,11 @@ function render(locale) {
   assert.strictEqual(selectors.length, 2, 'General and Setup both expose the language selector');
   for (const selector of selectors) {
     assert.strictEqual(selector.value, locale);
+<<<<<<< HEAD
     assert.deepStrictEqual(Array.from(selector.options, (o) => o.label), ['English', '简体中文', 'Русский', 'Türkçe']);
+=======
+    assert.deepStrictEqual(Array.from(selector.options, (o) => o.label), ['🇬🇧 English', '🇨🇳 简体中文', '🇷🇺 Русский', '🇹🇷 Türkçe', '🇧🇷 Português (Brasil)']);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     selector.change(locale === 'en' ? 'zh-CN' : 'en');
   }
   assert.strictEqual(calls.filter(([key]) => key === 'setLanguage').length, 2);

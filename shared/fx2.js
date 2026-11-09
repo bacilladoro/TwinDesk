@@ -2,12 +2,24 @@
 // Fast files v2 (docs/protocol.md), the app's side: starts the engine (shared/fx2-engine.js) in
 // an Electron utility process, or in this process where there is none (plain node, the tests), and
 // gives shared/fastfile.js promises for it. Kill switch: env TWINDESK_NO_FX2=1.
+<<<<<<< HEAD
+=======
+//
+// On demand: the engine starts when something may need it (need(key, true): a session, another
+// TwinDesk nearby; warm(): a socket coming in, a hello going out; any job) and stops IDLE_STOP_MS
+// after nothing does, never during a session or a job (the welcome promised its port). A new start
+// gets what the last one had: listen(tls), setPlain, setTokens. TWINDESK_FX2_ALWAYS=1: never stops.
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 'use strict';
 
 const path = require('path');
 const { EventEmitter } = require('events');
 
 const fx2Off = () => !!process.env.TWINDESK_NO_FX2;
+<<<<<<< HEAD
+=======
+const IDLE_STOP_MS = 30000;
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
 function utility() {
   if (!process.versions.electron || process.type !== 'browser' || process.env.TWINDESK_FX2_INPROC) return null;
@@ -22,9 +34,16 @@ function utility() {
 class Fx2 extends EventEmitter {
   // tls: the session server's https options ({key, cert} or {pfx, passphrase}); without, a client
   // only until listen(tls).
+<<<<<<< HEAD
   constructor({ tls = null } = {}) {
     super();
     this.tls = tls;
+=======
+  constructor({ tls = null, idleMs = IDLE_STOP_MS } = {}) {
+    super();
+    this.tls = tls;
+    this.idleMs = idleMs;
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     this.port = 0;
     this.plainPort = 0; // our plain HTTP server's (fxPlain), while it's on
     this.plainOn = false;
@@ -33,11 +52,118 @@ class Fx2 extends EventEmitter {
     this.failedRecv = null; // (id, early, message) for a file we receive that we didn't ask the engine for
     this.doneRecv = null; // (id, hashes)
     this.bytesRecv = null; // (id, n)
+<<<<<<< HEAD
     this._start();
     if (this.tls) this.listen(this.tls);
   }
 
   _start() {
+=======
+    this.tokens = { list: [], plain: [] };
+    this.needs = new Set();
+    this.running = false; // the engine started (or starting)
+    this.stopTimer = null;
+    this.waiters = []; // whenReady()
+    this.post = this._lazy(); // the first message starts it
+  }
+
+  // Something may need the engine (key on) or no longer does (off).
+  need(key, on) {
+    if (on) {
+      this.needs.add(key);
+      this.warm();
+    } else if (this.needs.delete(key)) this._idle();
+  }
+
+  // Start it now (if it isn't), for something about to come; it stops again when nothing needs it.
+  warm() {
+    if (!this.running && !this.dead) this._start();
+    this._idle();
+  }
+
+  get state() {
+    if (this.dead) return 'failed';
+    if (!this.running) return 'stopped';
+    return this.child ? 'running' : this.engine ? 'in-process' : 'starting';
+  }
+
+  _idle() {
+    clearTimeout(this.stopTimer);
+    this.stopTimer = null;
+    if (!this.running || this.needs.size || this.jobs.size || process.env.TWINDESK_FX2_ALWAYS) return;
+    this.stopTimer = setTimeout(() => this._stop(), this.idleMs);
+    if (this.stopTimer.unref) this.stopTimer.unref();
+  }
+
+  _stop() {
+    this.stopTimer = null;
+    if (!this.running || this.needs.size || this.jobs.size || this.closing) return;
+    this.running = false;
+    this.port = 0;
+    this.plainPort = 0;
+    this._settleWaiters();
+    const child = this.child;
+    this.child = null;
+    if (child) {
+      child.stopped = true;
+      try { child.kill(); } catch (_) { /* gone */ }
+    }
+    if (this.engine) {
+      const e = this.engine;
+      this.engine = null;
+      if (e.server) e.server.close();
+      if (e.plainServer) e.plainServer.close();
+      e.agent.destroy();
+      e.plainAgent.destroy();
+    }
+    this.post = this._lazy();
+    console.log('[fx2] the files engine stopped: nothing needs it');
+  }
+
+  // Resolves true once the engine listens (and its plain server too, while that's on), false after
+  // ms or when it can't. null when it already does (no wait at all).
+  whenReady(ms = 1500) {
+    if (this._readyNow()) return null;
+    if (this.dead) return Promise.resolve(false);
+    this.warm();
+    if (!this.tls) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const w = { resolve, timer: setTimeout(() => this._settleWaiters(w), ms) };
+      this.waiters.push(w);
+    });
+  }
+
+  _readyNow() {
+    return this.port > 0 && (!this.plainOn || this.plainPort > 0);
+  }
+
+  _settleWaiters(only) {
+    for (const w of this.waiters.slice()) {
+      if (only && w !== only) continue;
+      this.waiters.splice(this.waiters.indexOf(w), 1);
+      clearTimeout(w.timer);
+      w.resolve(this._readyNow());
+    }
+  }
+
+  _lazy() {
+    const lazy = (m) => {
+      this._start();
+      if (this.post !== lazy) this.post(m);
+    };
+    return lazy;
+  }
+
+  _start() {
+    if (this.running || this.dead) return;
+    this.running = true;
+    // What the engine had before it stopped (or was told before it ran).
+    const replay = () => {
+      if (this.tls) this.post({ op: 'listen', tls: this.tls });
+      if (this.plainOn) this.post({ op: 'plain', on: true });
+      if (this.tokens.list.length || this.tokens.plain.length) this.post({ op: 'tokens', ...this.tokens });
+    };
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     const up = utility();
     if (up) {
       const { app } = require('electron');
@@ -45,7 +171,13 @@ class Fx2 extends EventEmitter {
         const queue = [];
         this.post = (m) => queue.push(m);
         app.whenReady().then(() => {
+<<<<<<< HEAD
           this._fork(up);
+=======
+          if (!this.running) return;
+          this._fork(up);
+          replay();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
           for (const m of queue.splice(0)) this.post(m);
         });
         return;
@@ -53,6 +185,10 @@ class Fx2 extends EventEmitter {
     }
     if (up) this._fork(up);
     else this._inProcess();
+<<<<<<< HEAD
+=======
+    replay();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   _fork(up) {
@@ -62,6 +198,7 @@ class Fx2 extends EventEmitter {
       this.post = (m) => { try { child.postMessage(m); } catch (_) { /* gone */ } };
       child.on('message', (m) => this._on(m));
       child.on('exit', (code) => {
+<<<<<<< HEAD
         if (!this.closing) console.warn(`[fx2] the files process stopped (${code}): files go the fx way`);
         this.port = 0;
         this.plainPort = 0;
@@ -74,6 +211,36 @@ class Fx2 extends EventEmitter {
           if (!j.moved) e.early = true; // nothing went yet: the fx way
           j.reject(e);
         }
+=======
+        if (child.stopped) return; // stopped on purpose (_stop): the next need starts another
+        if (this.child !== child) return;
+        const was = { port: this.port, plain: this.plainPort }; // taken again in this process: the other side has them
+        this.port = 0;
+        this.plainPort = 0;
+        this.child = null;
+        for (const [k, j] of this.jobs) {
+          this.jobs.delete(k);
+          const e = new Error('the files process stopped');
+          if (!j.moved) e.early = true; // nothing went yet: the fx way for this file
+          j.reject(e);
+        }
+        if (this.closing) {
+          this.dead = true;
+          this.running = false;
+          this.post = () => {};
+          this._settleWaiters();
+          this.emit('exit');
+          return;
+        }
+        // It crashed (#143: an ARM64 laptop fell back to the old way for good): the engine goes on in
+        // this process instead, as fast, only on the main thread. The next files use it again.
+        console.warn(`[fx2] the files process stopped (${code}): the engine goes on in this process`);
+        this.crashed = `the files process stopped (${code})`;
+        this._inProcess();
+        if (this.tls) this.post({ op: 'listen', tls: this.tls, port: was.port });
+        if (this.plainOn) this.post({ op: 'plain', on: true, port: was.plain });
+        if (this.tokens.list.length || this.tokens.plain.length) this.post({ op: 'tokens', ...this.tokens });
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         this.emit('exit');
       });
     } catch (e) {
@@ -85,17 +252,30 @@ class Fx2 extends EventEmitter {
   // Our own server for the guest's requests (as the host), with the session's identity.
   listen(tls) {
     this.tls = tls;
+<<<<<<< HEAD
     this.post({ op: 'listen', tls });
   }
 
   // Can say fx2 in hello (as the guest): the engine is there.
   get client() {
     return !!this.post && !this.dead;
+=======
+    if (this.running) this.post({ op: 'listen', tls });
+  }
+
+  // Can say fx2 in hello (as the guest): the engine is there, or starts when asked.
+  get client() {
+    return !this.dead;
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   _inProcess() {
     const { Engine } = require('./fx2-engine.js');
+<<<<<<< HEAD
     const engine = new Engine((m) => setImmediate(() => this._on(m)));
+=======
+    const engine = new Engine((m) => setImmediate(() => this.engine === engine && this._on(m)));
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     this.engine = engine;
     this.post = (m) => engine.handle(m);
   }
@@ -105,18 +285,31 @@ class Fx2 extends EventEmitter {
   }
 
   setTokens(list, plain = []) {
+<<<<<<< HEAD
     this.post({ op: 'tokens', list: list.filter(Boolean), plain: plain.filter(Boolean) });
+=======
+    this.tokens = { list: list.filter(Boolean), plain: plain.filter(Boolean) };
+    if (this.running) this.post({ op: 'tokens', ...this.tokens });
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   // Unencrypted file transfers (shared/fastfile.js setPlain): our plain server on or off.
   setPlain(on) {
     this.plainOn = !!on;
     if (!on) this.plainPort = 0;
+<<<<<<< HEAD
     this.post({ op: 'plain', on: !!on });
   }
 
   _job(dir, id, onBytes) {
     return new Promise((resolve, reject) => {
+=======
+    if (this.running) this.post({ op: 'plain', on: !!on });
+  }
+
+  _job(dir, id, onBytes) {
+    const p = new Promise((resolve, reject) => {
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       const k = `${dir}:${id}`;
       const old = this.jobs.get(k);
       if (old) old.reject(new Error('replaced'));
@@ -124,6 +317,13 @@ class Fx2 extends EventEmitter {
       j.onBytes = (n) => { j.moved += n; if (onBytes) onBytes(n); };
       this.jobs.set(k, j);
     });
+<<<<<<< HEAD
+=======
+    this.warm();
+    const after = () => this._idle();
+    p.then(after, after);
+    return p;
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   // Host: the guest GETs it. Guest: PUT it to `to` {host, port, fp, token}. Resolves with the hashes.
@@ -154,7 +354,11 @@ class Fx2 extends EventEmitter {
         j.reject(new Error('Cancelled'));
       }
     }
+<<<<<<< HEAD
     this.post({ op: 'cancel', id });
+=======
+    if (this.running) this.post({ op: 'cancel', id });
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   reset() {
@@ -162,16 +366,28 @@ class Fx2 extends EventEmitter {
       this.jobs.delete(k);
       j.reject(new Error('the other computer disconnected'));
     }
+<<<<<<< HEAD
     this.post({ op: 'reset' });
+=======
+    if (this.running) this.post({ op: 'reset' });
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   close() {
     this.closing = true;
+<<<<<<< HEAD
+=======
+    clearTimeout(this.stopTimer);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     this.reset();
     if (this.child) try { this.child.kill(); } catch (_) { /* gone */ }
     if (this.engine && this.engine.server) this.engine.server.close();
     if (this.engine && this.engine.plainServer) this.engine.plainServer.close();
+<<<<<<< HEAD
     if (this.engine) this.engine.agent.destroy();
+=======
+    if (this.engine) { this.engine.agent.destroy(); this.engine.plainAgent.destroy(); }
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   _on(m) {
@@ -182,9 +398,17 @@ class Fx2 extends EventEmitter {
       case 'port':
         this.port = Number(m.port) || 0;
         if (this.port) console.log(`[fx2] files on port ${this.port}${this.child ? ' (utility process)' : ''}`);
+<<<<<<< HEAD
         return this.emit('port', this.port);
       case 'plainPort':
         this.plainPort = this.plainOn ? Number(m.port) || 0 : 0;
+=======
+        if (!this.port || !this.plainOn || this.plainPort) this._settleWaiters();
+        return this.emit('port', this.port);
+      case 'plainPort':
+        this.plainPort = this.plainOn ? Number(m.port) || 0 : 0;
+        if (this.port || !this.tls) this._settleWaiters();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         return;
       case 'want':
         Promise.resolve(this.want ? this.want(m.id, m.size) : null).catch(() => null)
@@ -214,4 +438,8 @@ class Fx2 extends EventEmitter {
   }
 }
 
+<<<<<<< HEAD
 module.exports = { Fx2, fx2Off };
+=======
+module.exports = { Fx2, fx2Off, IDLE_STOP_MS };
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b

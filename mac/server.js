@@ -15,6 +15,7 @@ const https = require('https');
 const { EventEmitter } = require('events');
 const { WebSocketServer } = require('ws');
 const P = require('../shared/protocol.js');
+const Quiet = require('../shared/quiet.js'); // idle sessions stop pinging every second (#143)
 
 const ICE_OFFERS = new Set([P.T.RTC_OFFER, P.T.AUDIO_OFFER]);
 const isLoopback = (a) => a === '127.0.0.1' || a === '::1';
@@ -39,7 +40,18 @@ class Server extends EventEmitter {
     this.https.on('error', (err) => this.emit('listenError', err));
     this.port = LISTEN_PORT;
     if (!opts.hold) this.listen();
+<<<<<<< HEAD
     this.tick = setInterval(() => this._liveness(), P.PING_MS);
+=======
+    this.tick = null; // the liveness timer: only while there are sockets (_arm), none on an idle tray
+    this.unquiet = Quiet.onChange(() => { if (this.tick) this._liveness(); }); // a hold reaches the other end at once
+  }
+
+  listen() {
+    if (this.https.listening || this._listenAsked) return;
+    this._listenAsked = true;
+    this.https.listen(LISTEN_PORT, '0.0.0.0', () => this.emit('listening'));
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   listen() {
@@ -65,7 +77,16 @@ class Server extends EventEmitter {
     };
     if (isLoopback(ctx.address) && this.blePorts.has(req.socket.remotePort)) ctx.transport = 'ble';
     Object.assign(ws, { ctx, lastRx: now, transport: ctx.transport, address: ctx.address, blePort: ctx.transport === 'ble' ? req.socket.remotePort : 0 });
+    // At most 16 sockets from one address that haven't authenticated (a LAN peer can't open
+    // thousands and hold each for UNAUTH_TIMEOUT_MS): past that the oldest goes, never the new one,
+    // so a phone retrying on flaky Wi-Fi always gets in. Our own Bluetooth/wired pipes are loopback.
+    if (!isLoopback(ctx.address)) {
+      const waiting = [];
+      for (const c of this.sockets) if (!c.authed && c.address === ctx.address) waiting.push(c);
+      if (waiting.length >= 16) waiting[0].ws.terminate(); // a Set keeps insertion order: the oldest
+    }
     this.sockets.add(ctx);
+    this._arm();
     ws.on('message', (data, isBinary) => this._onMessage(ws.ctx, data, isBinary, ws));
     ws.on('close', () => this._onSocketClose(ws));
     ws.on('error', (err) => console.error(`[server] socket ${ws.address}: ${err.message}`));
@@ -90,7 +111,7 @@ class Server extends EventEmitter {
     this.sockets.delete(ctx);
     if (this.current === ctx) {
       this.current = null;
-      if (ctx.os === P.OS.ANDROID && !ctx.released) this._phoneGrace(ctx.deviceId);
+      if (P.isPhoneOs(ctx.os) && !ctx.released) this._phoneGrace(ctx.deviceId);
     }
     this.emit('closed', ctx);
   }
@@ -133,6 +154,7 @@ class Server extends EventEmitter {
       if (msg.t === P.T.HELLO || msg.t.startsWith('pair.')) return this.emit('preauth', ctx, msg);
       return this.fail(ctx, P.E.BAD_MESSAGE, `"${msg.t}" is not allowed before welcome`);
     }
+    if (Quiet.seen(ws, msg)) return; // `idle {on}`: the other end's side of a quiet link
 
     if (msg.t === P.T.PING) return this.send(ctx, { t: P.T.PONG, ts: msg.ts });
     if (msg.t === P.T.BYE) { // Disconnect there: nothing to wait for
@@ -155,6 +177,15 @@ class Server extends EventEmitter {
     this.emit('message', msg, ctx); // peer.js routes it by type
   }
 
+  // Pings and silence checks every PING_MS while any socket is open; with none, nothing wakes the app.
+  _arm() {
+    if (this.tick || this.closed) return;
+    this.tick = setInterval(() => {
+      this._liveness();
+      if (!this.sockets.size) { clearInterval(this.tick); this.tick = null; }
+    }, P.PING_MS);
+  }
+
   _liveness() {
     const now = Date.now();
     for (const ctx of this.sockets) {
@@ -163,7 +194,17 @@ class Server extends EventEmitter {
         for (const ws of [ctx.ws, ctx.alt]) {
           if (!ws) continue;
           const limit = ws.transport === 'ble' ? P.BLE_TIMEOUT_MS : P.TIMEOUT_MS;
-          const rx = Math.max(ws.lastRx, (ws.blePort && this.blePorts.get(ws.blePort)) || 0); // through Bluetooth, bytes of a big message count too
+          let rx = Math.max(ws.lastRx, (ws.blePort && this.blePorts.get(ws.blePort)) || 0); // through Bluetooth, bytes of a big message count too
+          // Quiet links (shared/quiet.js): both ends idle, a ping every few minutes. Not through Bluetooth.
+          if (ws.transport !== 'ble' && ws.readyState === ws.OPEN) {
+            const q = Quiet.tick(ws, now, rx, (m) => ws.send(JSON.stringify(m)));
+            if (q.quiet) {
+              if (q.dead) { console.log(`[server] ${ctx.name || ctx.address} silent on a quiet link, closing`); ws.terminate(); }
+              else if (q.ping) ws.send(JSON.stringify({ t: P.T.PING, ts: now }));
+              continue;
+            }
+            rx = q.rx;
+          }
           if (now - rx > limit) {
             console.log(`[server] ${ctx.name || ctx.address} silent for ${limit} ms on ${ws.transport === 'ble' ? 'Bluetooth' : ws.address}, closing`);
             ws.terminate();
@@ -181,7 +222,10 @@ class Server extends EventEmitter {
     if (!ctx || ctx.ws.readyState !== ctx.ws.OPEN) return;
     // A phone on the USB cable: its WebRTC goes through the relay too (wired.js).
     if (ctx.ice && ICE_OFFERS.has(msg.t)) msg = { ...msg, ice: ctx.ice };
-    ctx.ws.send(JSON.stringify(msg));
+    // Cursor › Mouse and keyboard over Bluetooth: the pointer and keys on that socket (shared/bleinput.js; null: off).
+    const ws = this.bleInput ? this.bleInput.route(ctx.ws, ctx.alt, msg) : ctx.ws;
+    Quiet.sent(ws, msg);
+    ws.send(JSON.stringify(msg));
   }
 
   // Send to the authenticated client, if any.
@@ -202,14 +246,24 @@ class Server extends EventEmitter {
   }
 
   // Mark ctx authenticated; a newer client replaces the older one.
-  authenticate(ctx, { deviceId, name, os }, welcome) {
+  authenticate(ctx, who, welcome) {
+    // Fast files v2: the files engine starts on demand (shared/fx2.js) and its port goes in this
+    // welcome, so when it isn't listening yet (it usually is: someone nearby, the socket coming in
+    // started it) the welcome waits for it, a few tens of ms. Never long: without it, the fx way.
+    const wait = ctx.fxWanted && ctx.fx2Wanted && this.fxOn && !ctx.fx2Waited && this.fx2Wait ? this.fx2Wait(1500) : null;
+    if (wait) {
+      ctx.fx2Waited = true;
+      const go = () => { if (!ctx.authed && this.sockets.has(ctx) && ctx.ws.readyState === ctx.ws.OPEN) this.authenticate(ctx, who, welcome); };
+      return void wait.then(go, go);
+    }
+    const { deviceId, name, os } = who;
     if (this.current && this.current !== ctx) {
       const old = this.current;
       this.current = null;
       old.released = true; // taken over: a phone gets no grace
       // A computer a phone took over from waits and comes back when the phone lets go (busy);
       // one a computer took over from stays away until someone connects it again (replaced).
-      if (os === P.OS.ANDROID && old.os !== P.OS.ANDROID) this.fail(old, P.E.BUSY, `In use by ${name}`);
+      if (P.isPhoneOs(os) && !P.isPhoneOs(old.os)) this.fail(old, P.E.BUSY, `In use by ${name}`);
       else this.fail(old, P.E.REPLACED, old.deviceId === deviceId ? 'Another connection from this device replaced this one' : `${name} took over`);
     }
     ctx.authed = true;
@@ -231,7 +285,7 @@ class Server extends EventEmitter {
 
   // A phone holds the session (or just dropped it and may resume): computers are refused.
   phoneHolds() {
-    if (this.current && this.current.os === P.OS.ANDROID) return true;
+    if (this.current && P.isPhoneOs(this.current.os)) return true;
     return !!this.phoneGrace && Date.now() < this.phoneGrace.until;
   }
 
@@ -267,7 +321,10 @@ class Server extends EventEmitter {
   }
 
   close() {
+    this.closed = true;
+    if (this.unquiet) this.unquiet();
     clearInterval(this.tick);
+    this.tick = null;
     clearTimeout(this.graceTimer);
     for (const ctx of this.sockets) {
       if (ctx.alt) ctx.alt.terminate();

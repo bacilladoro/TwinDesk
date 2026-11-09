@@ -437,6 +437,15 @@ class Drop extends EventEmitter {
     this.recent.unshift({ ...r, at: Date.now() });
     this.recent.length = Math.min(this.recent.length, MAX_RECENT);
     this._changed();
+<<<<<<< HEAD
+=======
+  }
+
+  // Files › Recent › Clear: only the list; the files stay where they are.
+  clearRecent() {
+    this.recent.length = 0;
+    this._changed();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
 
   reveal(index) {

@@ -1,7 +1,13 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
 // The input lane in the helper (docs/protocol.md): what shared/inputlane.js's InputLane, MoveTotals,
 // MoveApply and LaneDriven do for moves, with the same timings, so a native peer and a JS peer behave
+<<<<<<< HEAD
 // alike. One thread: recv with a 1 ms timeout drives the throttle, the tail resends and the pings.
+=======
+// alike. One thread: recv with a 1 ms timeout drives the throttle, the tail resends and the pings while
+// this side drives or is active; otherwise it sleeps until its next deadline (a ping), at most WAIT_MAX,
+// and whatever needs it sooner (a session, driving) wakes it at once (wake()).
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 // td_move runs on the event tap's thread: a short lock and a send, never a wait.
 
 use crate::wire::*;
@@ -18,6 +24,11 @@ const PING_IDLE: u64 = 1000;
 const DOWN_AFTER: u64 = 3;
 const RESEND_FOR: Duration = Duration::from_secs(3);
 const RTT_EVERY: Duration = Duration::from_secs(5);
+<<<<<<< HEAD
+=======
+const FAST: Duration = Duration::from_millis(1); // driving or active: as it always was
+const WAIT_MAX: Duration = Duration::from_secs(1); // idle: the longest sleep (a lost wake costs at most this)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
 /// What the lane tells the helper (outside the lock).
 #[derive(Debug, Clone, PartialEq)]
@@ -137,6 +148,41 @@ impl Lane {
         let _ = sock.send_to(&pkt, peer);
     }
 
+<<<<<<< HEAD
+=======
+    // Driving or active: the 1 ms loop, which the throttle and the tails need.
+    fn fast(&self) -> bool {
+        self.active || self.sess.as_ref().map_or(false, |s| s.drive_route != 0)
+    }
+
+    // How long the lane thread may sleep in recv: 1 ms while fast, else until the next deadline.
+    fn wait(&self, now: Instant) -> Duration {
+        let s = match &self.sess { Some(s) => s, None => return WAIT_MAX };
+        if self.fast() {
+            return FAST;
+        }
+        let mut at = s.next_ping;
+        for t in s.move_due.iter().chain(s.move_tails.iter()).chain(s.event_tails.iter()) {
+            if *t < at {
+                at = *t;
+            }
+        }
+        at.saturating_duration_since(now).clamp(FAST, WAIT_MAX)
+    }
+
+    // The lane thread(s) out of recv now: a byte to our own port (not a packet: open() drops it).
+    fn wake(&self) {
+        for s in [&self.sock, &self.sock4].into_iter().flatten() {
+            if let Ok(a) = s.local_addr() {
+                let to: SocketAddr = if a.is_ipv6() { (Ipv6Addr::LOCALHOST, a.port()).into() } else { (Ipv4Addr::LOCALHOST, a.port()).into() };
+                if s.send_to(&[0u8], to).is_err() && a.is_ipv6() {
+                    let _ = s.send_to(&[0u8], SocketAddr::new(IpAddr::V6(Ipv4Addr::LOCALHOST.to_ipv6_mapped()), a.port()));
+                }
+            }
+        }
+    }
+
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     fn set_up(&mut self, up: bool, out: &mut Vec<Out>) {
         let active = self.active;
         let s = match &mut self.sess { Some(s) => s, None => return };
@@ -405,22 +451,43 @@ fn tune(s: socket2::Socket, is6: bool) -> UdpSocket {
         let _ = s.set_tclass_v6(0xB8);
     }
     let _ = is6; // Windows: qWAVE instead (qos.rs)
+<<<<<<< HEAD
     let _ = s.set_read_timeout(Some(Duration::from_millis(1)));
+=======
+    let _ = s.set_read_timeout(Some(FAST));
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     s.into()
 }
 
 fn run(sock: Arc<UdpSocket>) {
     let mut buf = [0u8; 2048];
+<<<<<<< HEAD
     loop {
         let got = sock.recv_from(&mut buf);
         with(|l, out| {
+=======
+    let mut cur = FAST;
+    loop {
+        let got = sock.recv_from(&mut buf);
+        let next = with(|l, out| {
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
             if let Ok((n, from)) = got {
                 if n <= MAX_PACKET {
                     l.packet(&buf[..n], from, out);
                 }
             }
+<<<<<<< HEAD
             l.tick(Instant::now(), out);
         });
+=======
+            let now = Instant::now();
+            l.tick(now, out);
+            l.wait(now)
+        });
+        if next != cur && sock.set_read_timeout(Some(next)).is_ok() {
+            cur = next;
+        }
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     }
 }
 
@@ -473,6 +540,10 @@ pub fn start(role: &str, key_hex: &str, ip: &str, port: u16) -> bool {
             d_route: 0, speed: 1.0, hold: false, held_d: (0.0, 0.0), ma_mn: 0, ma_cx: 0.0, ma_cy: 0.0, done: 0, held: None, early: None,
         });
         l.ping(now, out);
+<<<<<<< HEAD
+=======
+        l.wake();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         true
     })
 }
@@ -510,6 +581,10 @@ pub fn active(on: bool) {
                 s.next_ping = Instant::now();
             }
         }
+<<<<<<< HEAD
+=======
+        l.wake();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     })
 }
 
@@ -525,6 +600,12 @@ pub fn drive_reset(route: u32) {
             s.move_due = None;
             s.move_tails.clear();
         }
+<<<<<<< HEAD
+=======
+        if route != 0 {
+            l.wake();
+        }
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     })
 }
 
@@ -589,6 +670,12 @@ pub fn send_event(json: &[u8], es: u32) {
             _ => return,
         }
         l.send_events();
+<<<<<<< HEAD
+=======
+        if !l.fast() {
+            l.wake(); // its tails are due in 8 ms
+        }
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     })
 }
 

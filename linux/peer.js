@@ -34,7 +34,13 @@ class Peer {
     // Fast files with an app that can (shared/fastfile.js): file bytes over HTTPS on the host's port.
     // … and v2 (shared/fx2.js): through the files engine, a utility process; its server once we host.
     this.fx2 = fx2Off() ? null : new Fx2();
+<<<<<<< HEAD
     if (this.fx2) link.fx2Hello = () => this.fx2.client;
+=======
+    // It starts on demand: a session, another computer nearby (main.js), a socket coming in or a
+    // hello going out; the welcome waits for its port when it isn't up yet (server.js).
+    if (this.fx2) link.fx2Hello = () => { this.fx2.warm(); return this.fx2.client; };
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     this.fx = new FastFiles({ session: () => this._fxSession(), deliver: (m) => this._deliver(m), send: (m) => this.sendNow(m), fx2: this.fx2 });
     // Unencrypted file transfers (Files › Encrypt file transfers off; setPlain): what the host offered us.
     this.fxPlain = null;
@@ -50,6 +56,10 @@ class Peer {
     link.onState(() => this._changed());
     link.onAny = (msg) => this.fx.incoming(msg) || this._deliver(msg);
     link.on('welcome', (msg) => {
+<<<<<<< HEAD
+=======
+      if (this.fx2) this.fx2.need('guest', true);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       this.fx.reset();
       this.fxPlain = FastFiles.parsePlain(msg);
       const ws = link.ws;
@@ -57,6 +67,10 @@ class Peer {
       this._emit('welcome', msg);
     });
     link.on('closed', (msg) => {
+<<<<<<< HEAD
+=======
+      if (this.fx2) this.fx2.need('guest', false);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       this.fx.reset();
       if (this.il && this.il.role === 'guest') this.il.stop();
       this._emit('closed', msg);
@@ -73,6 +87,11 @@ class Peer {
     if (this.fx2) {
       this.fx2.listen(server.tls);
       server.fx2Port = () => this.fx2.port;
+<<<<<<< HEAD
+=======
+      server.fx2Wait = (ms) => this.fx2.whenReady(ms);
+      server.https.on('secureConnection', () => this.fx2.warm());
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     }
     if (this.il) server.ilOffer = (ctx) => (ctx.ilOn = this.il.offer(ctx.ilWanted, ctx.address));
     server.https.on('request', (req, res) => {
@@ -90,6 +109,7 @@ class Peer {
     server.on('client', (ctx) => {
       this.swapIn = P.newRoleSwapState(ctx.name);
       this.swapOut = P.newRoleSwapState(ctx.name);
+      if (this.fx2) this.fx2.need('host', true);
       this.fx.reset();
       if (this.il && !ctx.ilOn) this.il.stop();
       this._changed();
@@ -97,6 +117,7 @@ class Peer {
     });
     server.on('closed', (ctx) => {
       if (ctx.authed && !server.current) {
+        if (this.fx2) this.fx2.need('host', false);
         this.fx.reset();
         if (this.il && this.il.role === 'host') this.il.stop();
         this._emit('closed', {});
@@ -147,8 +168,31 @@ class Peer {
 
   // The input lane while it can carry input (started with this session, and not through
   // Bluetooth), or null: input goes on WSS as it always has.
+<<<<<<< HEAD
   lane() {
     if (!this.il || !this.il.started) return null;
+=======
+  // Cursor › Mouse and keyboard over Bluetooth (#158): shared/bleinput.js only while it's on.
+  useBleInput(on) {
+    if (!!this.bleInput === !!on) return;
+    const m = on ? require('../shared/bleinput.js') : null;
+    this.bleInput = m;
+    if (this.server) this.server.bleInput = m;
+    if (this.link) this.link.bleInput = m;
+    if (on && !this.hosting && this.link.bleAgain) this.link.bleAgain();
+  }
+
+  // Input through Bluetooth now: the input lane steps aside.
+  _bleInputNow() {
+    if (!this.bleInput) return false;
+    if (this.hosting) return this.bleInput.ready(this.server.current.ws, this.server.current.alt);
+    return this.bleInput.ready(this.link.ws, this.link.alt);
+  }
+
+  lane() {
+    if (!this.il || !this.il.started) return null;
+    if (this._bleInputNow()) return null;
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     if (this.hosting) return this.server.current.transport === 'ble' ? null : this.il;
     return this.link.authed && this.link.transport === 'ip' ? this.il : null;
   }
@@ -173,6 +217,7 @@ class Peer {
 
   sendNow(obj) {
     if (!obj || !this._allowed(obj.t)) return false;
+    if (obj.t === P.T.FILE_CHUNK) this.fx.sentChunk();
     if (!this.hosting) return this.link.send(obj);
     for (const m of P.swapRole(obj, this.swapOut)) this.server.send(this.server.current, m);
     return true;

@@ -7,7 +7,7 @@
 
 UI.tab({
   id: 'mac-pc',
-  hidden: (s) => UI.isPhone(s), // the Phone page has the phone's screen, sound and apps
+  for: ['computer'], // another computer's (shared/ui-kinds.js)
   group: 'Display',
   order: 10,
   title: 'Receive screen',
@@ -41,7 +41,10 @@ UI.tab({
 
     const details = UI.details(['Status', 'Display', 'Picture', 'Speed', 'Round trip', 'Codec', 'Decoder', 'Delay', 'Frames dropped', 'Freezes']);
 
+    // A Mac can also mirror here by itself, with AirPlay (shared/ui-web.js; Receive AirPlay on).
+    const airplayTip = UI.airplayMacTip ? UI.airplayMacTip() : null;
     body.append(
+      ...(airplayTip ? [airplayTip.el] : []),
       UI.card('', [
         winRow,
         modeRow,
@@ -54,6 +57,7 @@ UI.tab({
     );
 
     return (s) => {
+      if (airplayTip) airplayTip.update(s);
       const st = s.stream;
       const on = st.state === 'on';
       const connected = s.link.state === 'connected';

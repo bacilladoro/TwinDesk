@@ -15,6 +15,11 @@
   <a href="https://twin-desk.vercel.app"><b>Website</b></a> ·
   <a href="#new-in-25"><b>What's new</b></a> ·
   <a href="#what-it-does"><b>What it does</b></a> ·
+<<<<<<< HEAD
+=======
+  <a href="#apps"><b>Every app</b></a> ·
+  <a href="#compare"><b>How it compares</b></a> ·
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   <a href="#get-started"><b>Get started</b></a>
 </p>
 
@@ -226,7 +231,11 @@ Every app has **an all-new look**, in light and dark. And underneath, the mouse 
 | 📦 | **fx2.** Files in their own process, in parallel ranges, verified while they stream | [More](#speed) |
 | 🪟 | **Move windows.** Hold Right Ctrl and drag a window past the edge: it moves to the other computer | [More](#move-windows) |
 | 🎙 | **Microphone sharing.** One computer's microphone on the other, or the phone as a microphone | [More](#sound-and-microphone) |
+<<<<<<< HEAD
 | 🌍 | **Русский, Türkçe, 简体中文** on every desktop | |
+=======
+| 🌍 | **Русский, Türkçe, 简体中文, Português (Brasil)** on every desktop | |
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
 <a name="rezume"></a>
 
@@ -584,6 +593,144 @@ computers** (off until you want it), on the Connection page.
 
 ---
 
+<<<<<<< HEAD
+=======
+<a name="apps"></a>
+
+# 🧭 Every TwinDesk app
+
+The same TwinDesk runs on Mac, Windows and Linux. The phone apps and TwinDesk Web connect to any of
+them. The iPhone and iPad app and TwinDesk Web are new in 3.0.
+
+✅ yes · ◐ partly · ✗ no · — doesn't apply
+
+<details open>
+<summary><b>What each app can do</b></summary>
+
+| | Mac | Windows | Linux | Android | iPhone and iPad | TwinDesk Web |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Get it** | .dmg | installer | .deb, AppImage, Arch, Nix | .apk | .ipa, sideloaded | nothing to install: a browser, or add it to the Home Screen |
+| **Connecting** | | | | | | |
+| Same Wi-Fi | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| USB cable | ✅ phones | ✅ Android | ✅ Android | ✅ | ◐ to a Mac | ✗ |
+| Bluetooth | ✅ | ✅ | ✅ | ✅ | ✅ | ✗ |
+| Wi-Fi Direct or hotspot | ✅ | ✅ | ✅ | ✅ | ✗ | ✗ |
+| Several devices at once ([Mesh](#mesh)) | ✅ | ✅ | ◐ same Wi-Fi only | ◐ one computer at a time | ◐ one computer at a time | ◐ one computer at a time |
+| Phone to phone | — | — | — | ✅ | ✅ | — |
+| **Mouse and keyboard** | | | | | | |
+| Shares its mouse and keyboard | ✅ | ✅ | ✅ | — | — | — |
+| The pointer carries onto it | ✅ | ✅ | ✅ | ✅ | ✗ | ✗ |
+| Drag windows to another computer | ✅ | ✅ | ◐ Xorg | — | — | — |
+| Remote: touchpad, keyboard and gamepad | — | — | — | ✅ | ✅ | ✅ |
+| Real gamepad on the computer | — | — | — | ✅ | ✅ | ✅ |
+| Bluetooth gamepad, no TwinDesk on the computer | — | — | — | ✅ | ✗ | ✗ |
+| **Screens and apps** | | | | | | |
+| Shows its screen on another device | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ not in Safari on iPhone |
+| Extends onto another device | ✅ | ✅ | ◐ GNOME, X11 | — | — | — |
+| Sees and controls a computer's screen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Apple Pencil as a pen on the computer | — | — | — | — | ✅ iPad | ✅ iPad |
+| Its apps in windows on another computer | ✅ | ✅ | ◐ Xorg | ✅ | ✗ | — |
+| **Files and clipboard** | | | | | | |
+| Clipboard, text and pictures | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Send files both ways | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Drag files across the screen edge | ✅ | ✅ | ◐ out of Linux on Xorg | ✅ | ✗ | ✗ |
+| Shared folder | ✅ | ✅ | ✅ | ✅ both ways | ◐ the computer's, in Files | ◐ the computer's |
+| Its photos and files on the computer | — | — | — | ✅ | ◐ photos, the app's files | ✗ |
+| Drop: messages and files, like a chat | — | — | — | ✗ | ✗ | ✅ |
+| Terminal (`ssh twindesk`) | ✅ | ✅ | ✅ | — | — | — |
+| **Camera and sound** | | | | | | |
+| Its camera as a webcam on a computer | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Its microphone on a computer | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Plays a computer's sound | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Its sound on the computer | ✅ | ✅ | ✅ | ✅ | ◐ through AirPlay | ✗ |
+| **Phone and more** | | | | | | |
+| Calls answered on the computer | — | — | — | ✅ | ✗ | ✗ |
+| Texts, WhatsApp, Instagram, Telegram | — | — | — | ✅ | ✗ | ✗ |
+| Its notifications on the computer | ✅ | ✅ | ✅ | ✅ | ✗ | ✗ |
+| The computer's notifications here | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ when added to the Home Screen |
+| Media controls | ✅ | ✅ | ✅ | ✅ both ways | ◐ the computer's, on the Lock Screen | ✗ |
+| [ReZume](#rezume) | ✅ | ✅ | ✅ | ✅ | ✗ | ✗ |
+
+Most of the ✗ on iPhone and iPad come from iOS itself: an app there can't read other apps'
+notifications, handle calls or texts, or be driven by another device's mouse.
+
+</details>
+
+---
+
+<a name="compare"></a>
+
+# ⚖️ How it compares
+
+Most tools do one part of this: a shared mouse and keyboard, a phone link, a second screen or file
+sending. TwinDesk does all of them in one app, on every platform. These tables were made in
+November 2026. If something here is out of date or wrong, please
+[open an issue](https://github.com/InukaAsith/TwinDesk/issues) and it will be fixed.
+
+✅ yes · ◐ partly · ✗ no · — not confirmed
+
+<details open>
+<summary><b>Computer to computer</b></summary>
+
+| | **TwinDesk** | Synergy 3 | Deskflow | ShareMouse | Mouse without Borders | Universal Control |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Platforms | Mac, Windows, Linux | Mac, Windows, Linux | Mac, Windows, Linux | Mac, Windows | Windows | Mac, iPad |
+| Linux on Wayland | ✅ | ◐ | ✅ | ✗ | ✗ | ✗ |
+| Mouse and keyboard across the edge | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Trackpad gestures and media keys carry over | ✅ | ✗ | ✗ | ✗ | ✗ | ✅ |
+| Shared clipboard, text | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Shared clipboard, pictures | ✅ | ◐ | ◐ | — | ✅ | ✅ |
+| Drag files across the edge | ✅ | — | ✗ | ✅ | ✅ (small files) | ✅ |
+| Drag windows to the other computer | ✅ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| The other computer's apps in windows of their own | ✅ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Extended display and remote screen | ✅ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Camera as a webcam on the other computer | ✅ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Sound and microphone between computers | ✅ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Notifications from the other computer | ✅ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Shared folders and a terminal | ✅ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Wake-on-LAN | ✅ | ✗ | ✗ | — | ✗ | ✗ |
+| Three or more computers | ✅ ([Mesh](#mesh), beta) | ✅ | ✅ | ✅ | ✅ (up to 4) | ✅ (up to 3) |
+| Works without a shared network | ✅ Bluetooth, Wi-Fi Direct | ✗ | ✗ | ✗ | ✗ | ✅ |
+| At the login and lock screen | ✗ | ✅ | ✅ | ✅ | ◐ | ✗ |
+| Works with Barrier and Input Leap | ✗ | ✗ | ✅ | ✗ | ✗ | ✗ |
+| Input travels over | UDP ([tdv2](#speed)), TCP fallback | TCP | TCP | TCP | TCP | Apple's own |
+| Account or licence | none | licence | none | licence | none | Apple ID |
+| Price | free | paid | free | free and paid | free | free |
+
+</details>
+
+<details open>
+<summary><b>Phone to computer</b></summary>
+
+| | **TwinDesk** | Phone Link | KDE Connect | Apple Continuity | scrcpy | LocalSend |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Computers | Mac, Windows, Linux | Windows | Linux, Windows, Mac | Mac | Mac, Windows, Linux | all |
+| Phones | Android, iPhone and iPad | Android, iPhone (fewer features) | Android, iPhone (fewer features) | iPhone, iPad | Android | all |
+| Notifications | ✅ both ways | ✅ | ✅ both ways | ✅ | ✗ | ✗ |
+| Answer calls, talk through the computer | ✅ | ✅ | ◐ alerts, mute | ✅ | ✗ | ✗ |
+| Texts | ✅ SMS, WhatsApp, Instagram, Telegram | ✅ SMS | ✅ SMS | ✅ iMessage, SMS | ✗ | ✗ |
+| Phone screen mirroring and control | ✅ | ✅ some phones | ✗ | ✅ not in the EU | ✅ | ✗ |
+| Phone apps in windows of their own | ✅ | ✅ some phones | ✗ | ✗ | ◐ | ✗ |
+| Photos | ✅ | ✅ | ◐ | ✅ iCloud | ✗ | ✗ |
+| The phone's whole storage | ✅ | ◐ | ✅ | ✗ | ✗ | ✗ |
+| Send files both ways | ✅ | ✅ | ✅ | ✅ AirDrop | ◐ | ✅ |
+| Clipboard | ✅ text and pictures | ✅ | ✅ text | ✅ | ✅ | ✗ |
+| Phone as a webcam | ✅ | ✅ | ✗ | ✅ | ✅ | ✗ |
+| Phone as a microphone | ✅ | ✗ | ✗ | ✅ | ◐ | ✗ |
+| Tablet as a second screen | ✅ | ✗ | ✗ | ✅ Sidecar, iPad | ✗ | ✗ |
+| Phone as touchpad, keyboard or remote | ✅ | ◐ | ✅ | ✗ | ✗ | ✗ |
+| Phone as a gamepad, or a real controller | ✅ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| The computer's mouse carries onto the phone | ✅ | ✗ | ✗ | ✅ iPad | ◐ in its window | ✗ |
+| Media controls | ✅ | ✅ | ✅ | ◐ | ✗ | ✗ |
+| USB, Bluetooth, Wi-Fi Direct | ✅ all three | ◐ | ◐ | ✅ | USB, Wi-Fi | ✗ same network |
+| Setup | an app; wireless debugging for screen, apps and camera | built into Windows | an app | built in | USB debugging | an app |
+| Account | none | Microsoft account | none | Apple ID | none | none |
+
+</details>
+
+---
+
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 <a name="get-started"></a>
 
 # 🚀 Get started
@@ -613,6 +760,26 @@ direct Wi-Fi link or a cable. There are no accounts, no telemetry and no cloud r
 texts, photos and camera go straight from the phone to your computer and nowhere else. Pairing
 locks out an address that keeps guessing wrong. The only internet request is an update check
 against GitHub's public releases, which you can turn off.
+<<<<<<< HEAD
+=======
+
+<a name="code-signing"></a>
+
+## Code signing policy
+
+Free code signing on Windows provided by [SignPath.io](https://about.signpath.io), certificate by
+[SignPath Foundation](https://signpath.org).
+
+Only the Windows installers built from this repository by the **Build Windows** GitHub Actions
+workflow, on GitHub-hosted runners, are signed. Every signing request is approved by hand.
+
+- Committers and reviewers: [@InukaAsith](https://github.com/InukaAsith) (outside [contributors](https://github.com/InukaAsith/TwinDesk/graphs/contributors) send pull requests, which he reviews before merging)
+- Approvers: [@InukaAsith](https://github.com/InukaAsith)
+
+This program will not transfer any information to other networked systems unless specifically
+requested by the user or the person installing or operating it (see [Privacy](#privacy) above:
+the only automatic request is the update check against GitHub's releases, which can be turned off).
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
 <br>
 
@@ -881,9 +1048,19 @@ native lane, and the Arch package. Set the `ANDROID_KEYSTORE` secret to the key 
 signed with (`base64 -i ~/.android/debug.keystore`): the APKs then install over existing ones, and
 the Linux and Windows builds carry the full Android app.
 
+<<<<<<< HEAD
 To Authenticode-sign the Windows installers, set `WIN_CSC_LINK` to a base64-encoded code-signing
 `.pfx` and `WIN_CSC_KEY_PASSWORD` to its password. When `WIN_CSC_LINK` is set, the build fails if
 signing can't complete instead of publishing an unsigned installer.
+=======
+**Build Windows** signs the installers through [SignPath](#code-signing): set the
+`SIGNPATH_API_TOKEN` secret to the SignPath CI user's API token and pick the signing policy
+(`test-signing`, `release-signing`, or `none` for unsigned) when running the workflow. Alternatively,
+to Authenticode-sign with a certificate of your own, set `WIN_CSC_LINK` to a base64-encoded
+code-signing `.pfx` and `WIN_CSC_KEY_PASSWORD` to its password (run with signing `none`). When
+`WIN_CSC_LINK` is set, the build fails if signing can't complete instead of publishing an unsigned
+installer.
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
 </details>
 
@@ -915,3 +1092,8 @@ Copyright © 2026 inukaasith.
 
 Parts are adapted from [DeskPad](https://github.com/Stengo/DeskPad) (MIT). See [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)
 for details.
+
+---
+
+The AirPlay receiver (Windows and Linux) is adapted from [UxPlay](https://github.com/FDH2/UxPlay) and the projects it builds on; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
+AirPlay, Apple TV, iPhone, iPad and Mac are trademarks of Apple Inc. TwinDesk is not affiliated with or endorsed by Apple.

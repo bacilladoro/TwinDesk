@@ -24,6 +24,10 @@ const https = require('https');
 const { EventEmitter } = require('events');
 const { WebSocketServer } = require('ws');
 const P = require('../../shared/protocol.js');
+<<<<<<< HEAD
+=======
+const Quiet = require('../../shared/quiet.js'); // idle sessions stop pinging every second (#143)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 const { LanePool } = require('../../shared/inputlane.js');
 
 const ICE_OFFERS = new Set([P.T.RTC_OFFER, P.T.AUDIO_OFFER]);
@@ -53,6 +57,12 @@ class Server extends EventEmitter {
     this.https = https.createServer(this.tls);
     this.https.requestTimeout = 0; // not Node's 5-min cap on a whole request: fast files' PUTs (a phone's, a guest's) outlast it
     this.wss = new WebSocketServer({ server: this.https, maxPayload: P.MAX_PAYLOAD });
+    // A phone's own screen (an iPhone's Share Screen, Android's Mirroring › Native): its upload here.
+    this.https.on('request', (req, res) => {
+      if (require('../../shared/nativescreen.js').NativeScreen.request(req, res)) return;
+      res.writeHead(404);
+      res.end();
+    });
     this.wss.on('connection', (ws, req) => this._onConnection(ws, req));
     this.wss.on('error', () => {}); // ws repeats the server's errors here; listenError below reports them
     this.https.on('error', (err) => this.emit('listenError', err)); // e.g. EADDRINUSE: another copy listens
@@ -62,6 +72,7 @@ class Server extends EventEmitter {
       this.emit('listening');
     });
     this.tick = tick ? setInterval(() => this.liveness(), TICK_MS) : null;
+    this.unquiet = tick ? Quiet.onChange(() => this.liveness()) : null; // a hold reaches the other end at once
   }
 
   // The primary client: setPrimary()'s device while it is connected; else the most recently
@@ -74,8 +85,8 @@ class Server extends EventEmitter {
     let best = null;
     for (const c of this.clients.values()) {
       if (!best) best = c;
-      else if ((best.os === P.OS.ANDROID) !== (c.os === P.OS.ANDROID)) {
-        if (c.os !== P.OS.ANDROID) best = c;
+      else if ((P.isPhoneOs(best.os)) !== (P.isPhoneOs(c.os))) {
+        if (!P.isPhoneOs(c.os)) best = c;
       } else if (c.authSeq > best.authSeq) best = c;
     }
     return best;
@@ -118,6 +129,14 @@ class Server extends EventEmitter {
     };
     if (isLoopback(ctx.address) && this.blePorts.has(req.socket.remotePort)) ctx.transport = 'ble';
     Object.assign(ws, { ctx, lastRx: now, lastTx: now, transport: ctx.transport, address: ctx.address, blePort: ctx.transport === 'ble' ? req.socket.remotePort : 0 });
+    // At most 16 sockets from one address that haven't authenticated (a LAN peer can't open
+    // thousands and hold each for UNAUTH_TIMEOUT_MS): past that the oldest goes, never the new one,
+    // so a phone retrying on flaky Wi-Fi always gets in. Our own Bluetooth/wired pipes are loopback.
+    if (!isLoopback(ctx.address)) {
+      const waiting = [];
+      for (const c of this.sockets) if (!c.authed && c.address === ctx.address) waiting.push(c);
+      if (waiting.length >= 16) waiting[0].ws.terminate(); // a Set keeps insertion order: the oldest
+    }
     this.sockets.add(ctx);
     ws.on('message', (data, isBinary) => this._onMessage(ws.ctx, data, isBinary, ws));
     ws.on('close', () => this._onSocketClose(ws));
@@ -186,6 +205,7 @@ class Server extends EventEmitter {
       if (msg.t === P.T.HELLO || msg.t.startsWith('pair.')) return this.emit('preauth', ctx, msg);
       return this.fail(ctx, P.E.BAD_MESSAGE, `"${msg.t}" is not allowed before welcome`);
     }
+    if (ws && Quiet.seen(ws, msg)) return; // `idle {on}`: the other end's side of a quiet link
 
     if (msg.t === P.T.PING) return this.send(ctx, { t: P.T.PONG, ts: msg.ts });
     if (msg.t === P.T.BYE) { // Disconnect there: nothing to wait for
@@ -220,7 +240,18 @@ class Server extends EventEmitter {
           const primary = ws === ctx.ws; // the session's own socket: its times are the client's (ctx)
           const ble = ws.transport === 'ble';
           // through Bluetooth a big message takes seconds: bytes still arriving count as a sign of life
-          const rx = Math.max(primary ? ctx.lastRx || 0 : ws.lastRx || 0, (ws.blePort && this.blePorts.get(ws.blePort)) || 0);
+          let rx = Math.max(primary ? ctx.lastRx || 0 : ws.lastRx || 0, (ws.blePort && this.blePorts.get(ws.blePort)) || 0);
+          // Quiet links (shared/quiet.js): both ends idle, a ping every few minutes. Not through Bluetooth;
+          // never the input partner's link (setBusy true).
+          if (!ble && ws.readyState === ws.OPEN) {
+            const q = Quiet.tick(ws, now, rx, (m) => this._raw(ws, m), this.busyFlags.get(ctx.deviceId) === true);
+            if (q.quiet) {
+              if (q.dead) { console.log(`[server] ${ctx.name || ctx.address} silent on a quiet link, closing`); ws.terminate(); }
+              else if (q.ping) { ws.lastPing = now; this._raw(ws, { t: P.T.PING, ts: now }); }
+              continue;
+            }
+            rx = q.rx;
+          }
           const timeout = busy ? (ble ? P.BLE_TIMEOUT_MS : P.TIMEOUT_MS) : (ble ? P.BLE_TIMEOUT_MS : P.IDLE_TIMEOUT_MS);
           const every = busy ? P.PING_MS : P.IDLE_PING_MS;
           const tx = primary ? ctx.lastTx || 0 : ws.lastTx || 0;
@@ -250,6 +281,7 @@ class Server extends EventEmitter {
     if (!ctx || ctx.ws.readyState !== ctx.ws.OPEN) return;
     // A phone on the USB cable: its WebRTC goes through the relay too (wired.js).
     if (ctx.ice && ICE_OFFERS.has(msg.t)) msg = { ...msg, ice: ctx.ice };
+    Quiet.sent(ctx.ws, msg);
     this._raw(ctx.ws, msg);
     ctx.lastTx = ctx.ws.lastTx;
   }
@@ -322,7 +354,7 @@ class Server extends EventEmitter {
   // Disconnect a phone on purpose (ctx: its client; default every phone client).
   releasePhone(ctx = null) {
     for (const c of this.clients.values()) {
-      if (c.os !== P.OS.ANDROID || (ctx && c.deviceId !== ctx.deviceId)) continue;
+      if (!P.isPhoneOs(c.os) || (ctx && c.deviceId !== ctx.deviceId)) continue;
       c.released = true;
       this.fail(c, P.E.RELEASED, 'The Mac disconnected the phone');
       setTimeout(() => c.ws.terminate(), 1000); // an older phone app never answers the close
@@ -337,6 +369,10 @@ class Server extends EventEmitter {
 
   close() {
     clearInterval(this.tick);
+<<<<<<< HEAD
+=======
+    if (this.unquiet) this.unquiet();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     this.ilPool.close();
     clearTimeout(this.graceTimer);
     for (const ctx of this.sockets) {

@@ -19,7 +19,7 @@ const SETTINGS_URLS = {
   location: 'x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices',
   extensions: 'x-apple.systempreferences:com.apple.ExtensionsPreferences?Sharing',
 };
-const TABS = ['phone', 'overview', 'connection', 'mirror', 'papps', 'calls', 'messages', 'media', 'pfiles', 'share', 'receive', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'remote', 'apps', 'rezume', 'multi', 'general', 'about'];
+const TABS = ['phone', 'overview', 'connection', 'mirror', 'papps', 'calls', 'messages', 'media', 'pfiles', 'share', 'receive', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'remote', 'apps', 'rezume', 'multi', 'web', 'airplay', 'general', 'about'];
 
 const bool = (v) => !!v;
 const clamp = (lo, hi, dflt) => (v) => {
@@ -40,18 +40,30 @@ const SCHEMA = {
     resistancePx: (v) => Math.round(clamp(0, 400, 120)(v)), speed: clamp(0.25, 4, 1), reverseScroll: bool, hotkeySwitch: bool, linked: bool, gestures: bool, ble: bool, syncPads: bool, shakeHome: bool,
   },
   keys: { swapCtrlCmd: bool, hotkey: oneOf(P.HOTKEYS, 'AltRight'), lockKeys: (v) => CL.validKeys(v, CL.DEFAULT_KEYS.mac) },
+<<<<<<< HEAD
   app: { openAtLogin: bool, keepAwake: bool, hud: bool, inputProtocol: oneOf(['udp', 'tcp'], 'udp') },
   updates: { auto: bool, skipped: (v) => (typeof v === 'string' ? v.slice(0, 40) : '') },
   audio: { send: bool, receive: bool, muteLocal: bool, volume: clamp(0, 1, 1), phoneMedia: bool, micSend: bool, micReceive: bool, micDevice: devId, micOut: devId }, // mic*: shared/mic.js
+=======
+  app: { openAtLogin: bool, keepAwake: bool, hud: bool, inputProtocol: oneOf(['udp', 'tcp'], 'udp'), keepPinging: bool },
+  updates: { auto: bool, skipped: (v) => (typeof v === 'string' ? v.slice(0, 40) : '') },
+  audio: { send: bool, receive: bool, muteLocal: bool, engine: oneOf(['helper', 'system'], 'helper'), volume: clamp(0, 1, 1), phoneMedia: bool, micSend: bool, micReceive: bool, micDevice: devId, micOut: devId }, // mic*: shared/mic.js
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   terminal: { allowPc: bool, connectPc: bool },
   files: { acceptDrops: bool, reveal: bool, dragEdge: bool, plain: bool, shortcuts: bool, copyKeys: accel('Control+Alt+C'), pasteKeys: accel('Control+Alt+V') },
   notifs: { send: bool, receive: bool, hideText: bool },
   smb: { connectPc: bool },
   apps: { offer: bool, onVirtual: bool, moveWindows: bool, moveKey: oneOf(['ControlRight', 'ControlLeft', 'ShiftRight', 'ShiftLeft', 'AltRight', 'AltLeft', 'MetaRight', 'MetaLeft'], 'MetaRight') }, // moveWindows: Apps › Move windows (movewin.js)
   receive: { on: bool, fullScreen: bool, input: bool, framegen: bool },
+<<<<<<< HEAD
   sharing: { remote: bool, pace: oneOf(['fast', 'smooth'], 'fast'), codec: oneOf(['h264', 'h265'], 'h264') },
   papps: { on: bool },
   phone: { sound: bool, bitrateMbps: (v) => Math.round(clamp(2, 40, 8)(v)), maxSize: oneOf([0, 1920, 1600, 1280, 1024], 0), wallpaper: bool, input: oneOf(['adb', 'phone'], 'adb'), inputPicked: bool, mirror: oneOf(['auto', 'adb', 'native'], 'auto'), soundVia: oneOf(['auto', 'adb', 'native'], 'auto'), enterSends: bool, arrowSwipe: bool },
+=======
+  sharing: { remote: bool, pace: oneOf(['fast', 'smooth', 'steady'], 'fast'), codec: oneOf(['h264', 'h265'], 'h264'), fps: oneOf([0, 30, 60], 0) },
+  papps: { on: bool },
+  phone: { sound: bool, bitrateMbps: (v) => Math.round(clamp(2, 40, 8)(v)), maxSize: oneOf([0, 1920, 1600, 1280, 1024], 0), wallpaper: bool, input: oneOf(['adb', 'phone'], 'adb'), inputPicked: bool, mirror: oneOf(['auto', 'adb', 'native'], 'auto'), soundVia: oneOf(['auto', 'adb', 'native'], 'auto'), enterSends: bool, arrowSwipe: bool, uhid: bool },
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   mount: { on: bool },
   clipboard: {
     enabled: bool, send: bool, receive: bool, mode: oneOf(['switch', 'instant'], 'instant'),
@@ -147,7 +159,7 @@ function setupIpc(ctx) {
     },
     // Disconnect the session (phone or computer); Connect again / Take over the Mac we're a guest of.
     disconnect() {
-      if (ctx.server.current && ctx.server.current.os === P.OS.ANDROID) return ctx.phone.disconnect();
+      if (ctx.server.current && P.isPhoneOs(ctx.server.current.os)) return ctx.phone.disconnect();
       ctx.server.disconnect();
     },
     connectAgain() {
@@ -270,8 +282,11 @@ function setupIpc(ctx) {
     },
     // Who may start our sharing, and smoothness vs. sharpness.
     setSharingOpts(partial) {
+      const was = { steady: settings.sharing.pace === 'steady', fps: settings.sharing.fps || 0 };
       setGroup('sharing', partial);
       ctx.pcView.applySettings(); // playback pace in the open viewer
+      // Steady is set up per session (the viewer's answer, pcview-renderer.js), the frame rate too: a new one.
+      if (ctx.stream && ctx.stream.active && (was.steady !== (settings.sharing.pace === 'steady') || was.fps !== (settings.sharing.fps || 0))) ctx.stream.restart('playback changed');
     },
     // Start/stop the other computer's sharing or switch its Extend/Mirror from here.
     remoteScreen(arg) {
@@ -334,6 +349,7 @@ function setupIpc(ctx) {
       ctx.kvm.settingsChanged(prev);
       if (partial && typeof partial.shared === 'boolean') ctx.kvm.setShared(partial.shared); // the Cursor tab's switch (Over Bluetooth through it)
       if (partial && typeof partial.locked === 'boolean') ctx.kvm.setLocked(partial.locked); // cursor lock: not a setting
+      if (partial && 'keyboard' in partial) (ctx.remote() ? ctx.remote().refresh() : ctx.loadRemote()); // voice typing follows Keyboard
     },
     setTerminal(partial) {
       const prev = settings.terminal.connectPc;
@@ -388,6 +404,13 @@ function setupIpc(ctx) {
     },
     revealDrop(index) {
       ctx.drop.reveal(Number(index));
+    },
+    clearFiles() {
+      ctx.drop.clearRecent();
+      if (ctx.fileSend) ctx.fileSend.clearRecent();
+    },
+    cancelSend() {
+      if (ctx.fileSend) ctx.fileSend.cancelSending();
     },
     setSmb(partial) {
       setGroup('smb', partial);
@@ -448,6 +471,8 @@ function setupIpc(ctx) {
       if (typeof partial.ble === 'boolean') settings.net.ble = partial.ble;
       if (typeof partial.blePc === 'boolean') settings.net.blePc = partial.blePc;
       if (typeof partial.bleWifiOff === 'boolean') settings.net.bleWifiOff = partial.bleWifiOff; // blepolicy.js wifiQuiet
+      if (typeof partial.tailscale === 'boolean') settings.net.tailscale = partial.tailscale; // shared/tailnet.js
+      if (typeof partial.bleInput === 'boolean') settings.net.bleInput = partial.bleInput; // shared/bleinput.js
       save();
       ctx.ble.apply();
       if (partial.blePc === false && ctx.bleLook) ctx.bleLook.look(false); // computers off: stop looking now, not at the next tick
@@ -624,10 +649,18 @@ function setupIpc(ctx) {
     adbQr(on) {
       if (ctx.adbQr) ctx.adbQr(on === true);
     },
+<<<<<<< HEAD
     // General › Appearance: { theme } and/or { accent } ('' follows the system); local only.
     setLook(o) {
       if (!o || typeof o !== 'object') return;
       const Look = require('../shared/look.js');
+=======
+    // General › Appearance: { style }, { theme } and/or { accent } ('' follows the system); local only.
+    setLook(o) {
+      if (!o || typeof o !== 'object') return;
+      const Look = require('../shared/look.js');
+      if (typeof o.style === 'string') settings.ui.style = Look.style(o.style);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       if (typeof o.theme === 'string') settings.ui.theme = Look.theme(o.theme);
       if (typeof o.accent === 'string') settings.ui.accent = Look.accent(o.accent);
       store.saveSettings(settings);
@@ -658,7 +691,7 @@ function setupIpc(ctx) {
     },
     relaunch() {
       app.relaunch();
-      app.exit(0);
+      app.quit(); // not exit: before-quit sends the cursor home and lets the helper release input
     },
     setMulti(on) {
       require('./multi').set(on === true); // Multi-device: TwinDesk restarts

@@ -1,7 +1,11 @@
 {
   "name": "macshare-win",
   "productName": "TwinDesk",
+<<<<<<< HEAD
   "version": "2.5.3",
+=======
+  "version": "3.0.0",
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   "description": "TwinDesk for Windows: pair with a Mac, view its screen, share mouse, keyboard and clipboard.",
   "license": "GPL-3.0",
   "private": true,

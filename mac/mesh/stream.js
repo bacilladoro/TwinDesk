@@ -11,12 +11,13 @@ const path = require('path');
 const { BrowserWindow, ipcMain, session, desktopCapturer, webContents } = require('electron');
 const { EventEmitter } = require('events');
 const P = require('../../shared/protocol.js');
+<<<<<<< HEAD
+=======
+const ScreenCodec = require('../../shared/screencodec.js');
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 const { loopback } = require('../audiohub.js');
 
 const RETRY_MS = 2000;
-// A phone over Wi-Fi: a high rate only fills the radio's queues (latency) without looking sharper
-// on a phone screen, and a smaller keyframe gets there sooner.
-const PHONE_MBPS = 16;
 
 // One display-media handler for the session, shared by every Stream (one per target device): the
 // request tells which capture window asked, so each Stream gives its own source.
@@ -78,7 +79,7 @@ class Stream extends EventEmitter {
       const on = !!msg.accept;
       // A phone's viewer says how big it is: Extend becomes a screen of that shape.
       const c = this.server.current;
-      if (c && c.os === P.OS.ANDROID && on && msg.width > 0 && msg.height > 0) {
+      if (c && P.isPhoneOs(c.os) && on && msg.width > 0 && msg.height > 0) {
         this.phoneSize = { width: msg.width | 0, height: msg.height | 0 };
         this.displays.setOverride(this.phoneSize);
       }
@@ -91,7 +92,7 @@ class Stream extends EventEmitter {
       else this._setStatus(this.getSettings().sharing.on ? 'no viewer' : 'off');
     });
     server.on('closed', () => {
-      if (!server.current || server.current.os !== P.OS.ANDROID) {
+      if (!server.current || !P.isPhoneOs(server.current.os)) {
         this.phoneSize = null;
         this.displays.setOverride(null);
       }
@@ -238,11 +239,11 @@ class Stream extends EventEmitter {
       if (!this.active || this.active.session !== s) return;
       const src = await this._source();
       const set = this.getSettings();
-      const phone = this._phone();
       this._toWindow('start', {
-        session: s, bitrateMbps: phone ? Math.min(PHONE_MBPS, set.bitrateMbps) : set.bitrateMbps, sourceId: src.id, width, height, audio,
+        session: s, bitrateMbps: set.bitrateMbps, // Share screen › Quality, for phones too sourceId: src.id, width, height, audio,
         ice: (this.server.current && this.server.current.ice) || null, // a phone on the USB cable: through the relay
-        fps: Math.min(120, Math.max(30, Math.round(target.hz || 60))),
+        fps: ScreenCodec.fps(target.hz, set.sharing && set.sharing.fps), // Share screen › Frame rate
+        steady: !!(set.sharing && set.sharing.pace === 'steady'), // Playback › Steady (shared/screencodec.js)
       });
     } catch (e) {
       console.error(`[stream] start failed: ${e.message}`);
@@ -253,18 +254,16 @@ class Stream extends EventEmitter {
 
   // Capture size: the display's pixels, scaled down to settings.streamMaxHeight if that is smaller.
   // Encoding 4K costs ~30 ms of latency on an M3; a GPU downscale to 1440p costs almost nothing.
-  // A phone: no more pixels than its screen has (Mirror of a big display is scaled to fit it).
+  // A phone too: its Receive screen page has the same Resolution (pair.sync 'res').
   _outSize(d) {
     const max = this.getSettings().streamMaxHeight;
-    let k = max && d.pixelHeight > max ? max / d.pixelHeight : 1;
-    const p = this._phone() && this.phoneSize;
-    if (p) k = Math.min(k, Math.max(p.width, p.height) / Math.max(d.pixelWidth, d.pixelHeight), Math.min(p.width, p.height) / Math.min(d.pixelWidth, d.pixelHeight));
+    const k = max && d.pixelHeight > max ? max / d.pixelHeight : 1;
     if (k >= 1) return { width: d.pixelWidth, height: d.pixelHeight };
     return { width: Math.round((d.pixelWidth * k) / 2) * 2, height: Math.round((d.pixelHeight * k) / 2) * 2 };
   }
 
   _phone() {
-    return !!(this.server.current && this.server.current.os === P.OS.ANDROID);
+    return !!(this.server.current && P.isPhoneOs(this.server.current.os));
   }
 
   _displaysChanged() {

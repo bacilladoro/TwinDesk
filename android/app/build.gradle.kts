@@ -10,8 +10,13 @@ android {
         applicationId = "com.twindesk.android"
         minSdk = 29 // Android 10: wireless debugging needs 11, everything else works from 10
         targetSdk = 36
+<<<<<<< HEAD
         versionCode = 20503
         versionName = "2.5.3"
+=======
+        versionCode = 30000
+        versionName = "3.0.0"
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     }
     // Two builds of the same app (same id and signature, so one installs over the other):
     //   standard — what people download: no notification access, SMS or Accessibility service, which

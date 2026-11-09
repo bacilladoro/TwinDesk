@@ -27,6 +27,7 @@ namespace MacShare
         static Capture capture;
         static Injector injector;
         static Stylus stylus; // a phone's stylus (Stylus.cs)
+        static Touch touch; // a viewer's fingers (Touch.cs)
         static Smoother smoother; // the phone Remote's moves, eased out (k.mm with smooth)
         static ClipWatch clipWatch; // "clipboard" events: something was copied (ClipWatch.cs)
         static DropEdge dropEdge;
@@ -55,11 +56,16 @@ namespace MacShare
             capture = new Capture(Emit);
             injector = new Injector();
             stylus = new Stylus(injector);
+            touch = new Touch(injector);
             injector.Moved = capture.FeedReturn;
             injector.Stops = capture.ReturnStops;
             smoother = new Smoother(delegate (double x, double y) { invoker.BeginInvoke((MethodInvoker)delegate { injector.Move(x, y); }); });
             Action<double, double> laneMove = injector.Move; // one delegate, not one per move
             Lane.Init(delegate (double x, double y) { smoother.Flush(laneMove); laneMove(x, y); }, Emit); // the input lane (Lane.cs)
+<<<<<<< HEAD
+=======
+            UsbWatch.Init(Emit); // USB plug/unplug events for adb phones (UsbWatch.cs)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
             HideCursor.Restore(); // in case a crash left the cursors blank
             StartCursorGuard();
             capture.Start();
@@ -307,7 +313,11 @@ namespace MacShare
                         injector.Apply(ev);
                         break;
                     case "lane": Lane.Handle(c); break; // the input lane in the helper (Lane.cs)
+<<<<<<< HEAD
                     case "releaseAll": smoother.Clear(); stylus.Leave(); injector.ReleaseAll(); break;
+=======
+                    case "releaseAll": smoother.Clear(); stylus.Leave(); touch.Leave(); injector.ReleaseAll(); break;
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
                     case "toastProgress": // a live toast with a progress bar (Toast.cs)
                         Toast.Progress(Json.Str(c, "aumid", ""), Json.Str(c, "tag", "files"), Json.Str(c, "title", ""), Json.Str(c, "status", ""), Json.Num(c, "value", -1), Json.Str(c, "label", ""));
                         break;
@@ -319,7 +329,16 @@ namespace MacShare
                         Dictionary<string, object> st = Json.Obj(c, "pen");
                         if (st != null) stylus.At((int)Json.Num(c, "x", 0), (int)Json.Num(c, "y", 0), st);
                         break;
+                    case "touch": touch.Set(Json.Str(c, "p", "")); break; // a viewer's fingers on this PC's screen (Touch.cs)
                     case "displays": c["displays"] = Display.List(); break;
+<<<<<<< HEAD
+=======
+                    case "usbWatch": c["present"] = UsbWatch.Present(); break; // current ADB phone state; UsbWatch.cs fires usbAdb events on change
+                    case "wlanProfile": // add a Wi-Fi profile from inline XML — no temp file (wifi.js)
+                        string wlanXml = Json.Str(c, "xml", "");
+                        Async(c, delegate (Dictionary<string, object> r) { Wlan.AddProfile(wlanXml); });
+                        return;
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
                     case "wifiLowLatency": c["applied"] = Wlan.Set(Json.Bool(c, "on", false)); break; // Wlan.cs: media streaming mode, no background scans
                     case "displayExtend": c["changed"] = Display.ExtendIfDuplicated(Json.Str(c, "monitor", "")); break;
                     // PC apps on the Mac
@@ -504,6 +523,10 @@ namespace MacShare
             if (cmd == "displays") reply["displays"] = c["displays"];
             if (cmd == "caps" && c.ContainsKey("on")) reply["on"] = c["on"];
             if (cmd == "lane" && c.ContainsKey("port")) reply["port"] = c["port"];
+<<<<<<< HEAD
+=======
+            if (cmd == "usbWatch" && c.ContainsKey("present")) reply["present"] = c["present"];
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
             if (cmd == "wifiLowLatency" && c.ContainsKey("applied")) reply["applied"] = c["applied"];
             if ((cmd == "displayMode" || cmd == "displayExtend") && error == null) reply["changed"] = c["changed"];
             if (cmd == "folderAt") { reply["path"] = c["path"]; reply["desktop"] = c["desktop"]; }

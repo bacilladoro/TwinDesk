@@ -149,7 +149,11 @@ class Media(private val hub: Hub, private val core: Core) {
         if (left.isNotEmpty() && Build.VERSION.SDK_INT >= 30) {
             runCatching {
                 val pi = MediaStore.createDeleteRequest(cr, left.map { it.second })
+<<<<<<< HEAD
                 Notify.mediaDelete(core.ctx, core.host?.name ?: "Your computer", left.size, pi)
+=======
+                Notify.mediaDelete(core.ctx, core.host?.name ?: tr("Your computer"), left.size, pi)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
                 confirm = left.size
             }
         }

@@ -17,6 +17,10 @@ const I18n = require('../shared/i18n.js');
 const chat = require('../shared/phonechat');
 const { Session, ACTION, TYPE } = require('./scrcpy');
 const { NativeScreen } = require('../shared/nativescreen.js');
+<<<<<<< HEAD
+=======
+const { uhidKey } = require('../shared/uhidkbd.js');
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 const { KeyState, ANDROID } = require('./android-keys');
 
 const T = P.T;
@@ -89,7 +93,11 @@ class PhoneViews extends EventEmitter {
   // audio-only session capturing the phone's mic, in a hidden window that plays it into the
   // TwinDesk Microphone (Linux) or a virtual audio cable (phoneview-renderer.js picks it).
   mic(on, out = '') {
+<<<<<<< HEAD
     const open = [...this.views.values()].find((v) => v.kind === 'mic');
+=======
+    const open = [...this.views.values()].find((v) => v.kind === 'mic' && !v.net);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     if (open && on && open.sink !== out) this.close(open.id); // another output picked: start again
     else if (open && on) return;
     if (on && this.bridge.serial) {
@@ -103,6 +111,21 @@ class PhoneViews extends EventEmitter {
     const open = [...this.views.values()].find((v) => v.kind === 'netsound');
     if (on && !open) this._open({ kind: 'netsound', title: this._i18n().t('Phone sound'), titleKey: 'Phone sound', width: 200, height: 100, hidden: true });
     else if (!on && open) this.close(open.id);
+  }
+
+  // An iPhone's microphone (its app captures it, phone.mic.want): the same hidden window as the
+  // Android one above, fed what comes through the session (netMicAudio) instead of an adb session.
+  netMic(on, out = '') {
+    const open = [...this.views.values()].find((v) => v.kind === 'mic' && v.net);
+    if (open && on && open.sink !== out) this.close(open.id);
+    else if (open && on) return;
+    if (on) this._open({ kind: 'mic', net: true, title: this._i18n().t('Phone microphone'), titleKey: 'Phone microphone', width: 200, height: 100, hidden: true, sink: out });
+    else if (open) this.close(open.id);
+  }
+
+  netMicAudio(m) {
+    const p = { codec: 'pcm', p: Array.isArray(m.p) ? m.p.filter((x) => typeof x === 'string').slice(0, 20) : [] };
+    for (const v of this.views.values()) if (v.kind === 'mic' && v.net) this._send(v, 'phoneview:netaudio', p);
   }
 
   netAudio(m) {
@@ -290,8 +313,13 @@ class PhoneViews extends EventEmitter {
     return I18n.create(I18n.resolveLanguage(settings.ui && settings.ui.language, app.getLocale()));
   }
 
+<<<<<<< HEAD
   _open({ kind, app, title, titleKey = '', titleName = '', width, height, opts, hidden = false, sink = '', native = false }) {
     if (!this.bridge.serial && kind !== 'netsound' && !native) {
+=======
+  _open({ kind, app, title, titleKey = '', titleName = '', width, height, opts, hidden = false, sink = '', native = false, net = false }) {
+    if (!this.bridge.serial && kind !== 'netsound' && !net && !native) {
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       // Wireless debugging not up yet (just on Wi-Fi after Bluetooth): main.js opens it once it is.
       if (kind !== 'mic' && this.onNoAdb && this.onNoAdb({ kind, app, title, titleKey, titleName, width, height, opts, hidden })) return;
       return this.bridge.emit('popup', 'home', 'Set up wireless debugging on the Phone page first');
@@ -304,7 +332,11 @@ class PhoneViews extends EventEmitter {
       // click never comes: without this its AudioContext stays suspended and silent).
       webPreferences: { preload: path.join(__dirname, 'preload-phoneview.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' },
     });
+<<<<<<< HEAD
     const v = { id, kind, app, title, win, sink, native, session: null, keys: new KeyState(), eaten: new Set(), size: null, ready: false, queue: [] };
+=======
+    const v = { id, kind, app, title, win, sink, native, net, session: null, keys: new KeyState(), eaten: new Set(), size: null, ready: false, queue: [] };
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     this.views.set(id, v);
     win.loadFile(path.join(__dirname, 'phoneview.html'), { query: { kind, title, titleKey, titleName, ...(kind === 'mic' ? { sink, virtual: process.platform === 'linux' ? '1' : '' } : {}), language: this._i18n().locale } });
     if (!hidden) win.once('ready-to-show', () => win.show());
@@ -331,7 +363,7 @@ class PhoneViews extends EventEmitter {
       this.emit('change');
     });
     this.emit('change');
-    if (kind !== 'netsound') this._start(v, opts).catch((e) => {
+    if (kind !== 'netsound' && !net) this._start(v, opts).catch((e) => {
       console.log(`[phone] ${kind} window: ${e.message}`);
       this._send(v, 'phoneview:status', { error: e.message, errorKey: e.messageKey, errorVars: e.messageVars });
     });
@@ -453,6 +485,7 @@ class PhoneViews extends EventEmitter {
         const code = swap ? P.mapKeyFromOtherPlatform(m.code) : m.code;
         if (this._special(v, code, !!m.down)) break;
         const e = v.keys.event(code, !!m.down);
+        if (uhidKey(s, (this.getSettings().phone || {}).uhid === true, code, !!m.down)) break; // a HID keyboard (#123)
         if (e) s.key(m.down ? ACTION.DOWN : ACTION.UP, e.keycode, e.meta, m.repeat ? 1 : 0);
         break;
       }

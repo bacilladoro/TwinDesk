@@ -9,6 +9,8 @@
 const WebSocket = require('ws');
 const { EventEmitter } = require('events');
 const P = require('../shared/protocol.js');
+const Tailnet = require('../shared/tailnet.js');
+const Quiet = require('../shared/quiet.js'); // idle sessions stop pinging every second (#143)
 const { PairLimit, versionMessage } = require('../shared/pairlimit.js');
 const store = require('./store');
 
@@ -65,6 +67,7 @@ class Link extends EventEmitter {
 
   send(obj) {
     if (!this.authed || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    Quiet.sent(this.ws, obj);
     this.ws.send(JSON.stringify(obj));
   }
 
@@ -138,14 +141,15 @@ class Link extends EventEmitter {
     store.write('hosts.json', this.hosts);
   }
 
-  _connect(mode, host) {
+  // at: another address for this attempt (its Tailscale one, shared/tailnet.js); the host's stays.
+  _connect(mode, host, at = '') {
     this._closeSocket();
     clearTimeout(this.timers.reconnect);
     this.mode = mode;
     this.host = host || null;
     this.nw = this.nm = null;
-    const target = mode === 'pair' ? this.pairState : host;
-    const ws = new WebSocket(`wss://${target.address}:${target.port}`, {
+    const target = mode === 'pair' ? this.pairState : { ...host, address: at || host.address };
+    const ws = new WebSocket(`wss://${target.address.includes(':') ? `[${target.address}]` : target.address}:${target.port}`, {
       rejectUnauthorized: false, // self-signed; the fingerprint is pinned instead
       maxPayload: P.MAX_PAYLOAD,
       handshakeTimeout: 5000,
@@ -201,6 +205,7 @@ class Link extends EventEmitter {
     if (!msg || typeof msg.t !== 'string') return;
     this.lastRx = Date.now();
     if (this.ctx) this.ctx.lastRx = this.lastRx;
+    if (this.authed && Quiet.seen(this.ws, msg)) return; // `idle {on}`: the other end's side of a quiet link
     switch (msg.t) {
       case T.PAIR_NONCE: return this._onNonce(msg);
       case T.PAIR_OK: return this._onPairOk(msg);
@@ -265,6 +270,8 @@ class Link extends EventEmitter {
     this.attempt = 0;
     const h = this.host;
     if (typeof msg.macName === 'string' && msg.macName) h.name = msg.macName.slice(0, 64);
+    const tail = Tailnet.clean(msg.tail); // its Tailscale addresses, for away from its network
+    if (tail.length || msg.tail) h.tail = tail;
     h.lastSeen = Date.now();
     this._save();
     this.ctx = {
@@ -275,14 +282,27 @@ class Link extends EventEmitter {
       fx2Port: msg.fx2 && typeof msg.fx2 === 'object' && Number.isInteger(msg.fx2.port) && msg.fx2.port > 0 && msg.fx2.port < 65536 ? msg.fx2.port : 0, // fast files v2 (shared/fx2.js); older hosts: none
       fxPlainMsg: msg.fxPlain, // unencrypted file transfers (shared/fastfile.js parsePlain); older hosts: none
     };
-    this.timers.ping = setInterval(() => {
-      if (Date.now() - this.lastRx > P.TIMEOUT_MS) {
-        this.lastError = 'Stopped answering';
-        if (this.ws) this.ws.terminate();
+    const beat = () => {
+      const ws = this.ws;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const now = Date.now();
+      // Quiet links (shared/quiet.js): both ends idle, a ping every few minutes.
+      const q = Quiet.tick(ws, now, this.lastRx, (m) => ws.send(JSON.stringify(m)));
+      if (q.quiet) {
+        if (q.dead) { this.lastError = 'Stopped answering'; ws.terminate(); }
+        else if (q.ping) this._raw({ t: T.PING, ts: now });
         return;
       }
-      this._raw({ t: T.PING, ts: Date.now() });
-    }, P.PING_MS);
+      if (now - q.rx > P.TIMEOUT_MS) {
+        this.lastError = 'Stopped answering';
+        ws.terminate();
+        return;
+      }
+      this._raw({ t: T.PING, ts: now });
+    };
+    this._beat = beat;
+    if (!this.unquiet) this.unquiet = Quiet.onChange(() => { if (this.authed && this._beat) this._beat(); }); // a hold reaches the other end at once
+    this.timers.ping = setInterval(beat, P.PING_MS);
     this.takeover = false;
     this.busyBy = '';
     this._setStatus('connected', '');
@@ -364,7 +384,8 @@ class Link extends EventEmitter {
         this._save();
       }
       this._setStatus('connecting', this.lastError || '');
-      this._connect('session', seen);
+      // Not seen here: every other attempt through Tailscale, when both are on it (#161).
+      this._connect('session', seen, Tailnet.pick({ address: seen.address, seen: at, tail: seen.tail, attempt: this.attempt }));
     }, d);
   }
 
@@ -380,6 +401,7 @@ class Link extends EventEmitter {
 
   _clearSocketTimers() {
     clearInterval(this.timers.ping);
+    this._beat = null;
     clearTimeout(this.timers.hello);
   }
 

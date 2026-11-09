@@ -90,9 +90,15 @@ val pal: Palette @Composable get() = LocalPalette.current
 // The look (General › Appearance, as on the computers: shared/look.js): the theme (system, light,
 // dark) and the accent colour, "" following the phone's own (Material You, Android 12+; else blue).
 // A local preference, never synchronized.
+<<<<<<< HEAD
 // The phone's look (set by App: not on a tablet, which keeps the Mac-like one): bigger soft cards
 // without borders, a faint shadow, pill buttons.
 object Modern { var on = false }
+=======
+// The Material 3 Expressive look, on the phone and the tablet alike (TwinDesk Web has it too): bigger
+// soft cards without borders, a faint shadow, pill buttons. Off: the older Mac-like one.
+object Modern { var on = true }
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
 object Look {
     val THEMES = listOf("system", "light", "dark")
@@ -123,7 +129,10 @@ object Look {
 fun Theme(content: @Composable () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     Look.load(ctx)
+<<<<<<< HEAD
     Modern.on = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
+=======
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     val dark = when (Look.theme) { "light" -> false; "dark" -> true; else -> isSystemInDarkTheme() }
     val a = if (Look.accent != 0L) Color(Look.accent) else Look.system(ctx, dark)
     val base = (if (dark) Dark else Light)
@@ -135,12 +144,23 @@ fun Theme(content: @Composable () -> Unit) {
     val up = { c: Color, f: Float -> androidx.compose.ui.graphics.lerp(c, Color.White, f) }
     val sheet = if (dark) up(outer, 0.05f) else up(outer, 0.65f)
     val card = if (dark) up(sheet, 0.06f) else Color.White
+<<<<<<< HEAD
     val p = if (Modern.on) base.copy(
         accent = a, accentSoft = a.copy(alpha = if (dark) 0.22f else 0.12f),
         content = outer, sheet = sheet, card = card,
         chip = if (dark) up(card, 0.07f) else androidx.compose.ui.graphics.lerp(sheet, Color.Black, 0.03f),
         line = if (dark) Color(0x14FFFFFF) else Color(0x0F000000),
     ) else base.copy(accent = a, accentSoft = a.copy(alpha = if (dark) 0.22f else 0.12f), chip = if (dark) Color(0xFF333336) else Color(0xFFF3F3F7))
+=======
+    // The tablet has the same (its sidebar on the tinted background, the page in the sheet beside it:
+    // MainActivity).
+    val p = base.copy(
+        accent = a, accentSoft = a.copy(alpha = if (dark) 0.22f else 0.12f),
+        content = outer, sidebar = outer, sheet = sheet, card = card,
+        chip = if (dark) up(card, 0.07f) else androidx.compose.ui.graphics.lerp(sheet, Color.Black, 0.03f),
+        line = if (dark) Color(0x14FFFFFF) else Color(0x0F000000),
+    )
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     val scheme = (if (dark) darkColorScheme() else lightColorScheme()).copy(
         primary = p.accent, onPrimary = Color.White, surface = p.content, background = p.content,
         onSurface = p.text, onSurfaceVariant = p.muted, outline = p.faint, surfaceContainer = p.card,
@@ -179,6 +199,26 @@ object Ico {
     val camera = lineIcon("camera", "M2.5 6h10v8h-10z M12.5 8.5l5-2.5v8l-5-2.5")
     val photo = lineIcon("photo", "M3 4.5h14v11H3z M3 13l4-4 3.5 3.5 2-2L17 14.5 M12.5 7.5h.1")
     val folder = lineIcon("folder", "M2.5 5h5.5l1.5 2h8v9.5h-15z")
+    val media = lineIcon("media", "M7.5 14.5V4.5l9-2v10 M7.5 14.5a2.2 2.2 0 1 1-4.4 0 2.2 2.2 0 0 1 4.4 0z M16.5 12.5a2.2 2.2 0 1 1-4.4 0 2.2 2.2 0 0 1 4.4 0z")
+    val play = lineIcon("play", "M6 4l10 6-10 6z")
+    val pause = lineIcon("pause", "M7 4.5v11 M13 4.5v11")
+    val prev = lineIcon("prev", "M4.5 4.5v11 M16 4.5l-8 5.5 8 5.5z")
+    val next = lineIcon("next", "M15.5 4.5v11 M4 4.5l8 5.5-8 5.5z")
+    // The Overview's shortcuts (Shortcuts.kt).
+    val mic = lineIcon("mic", "M10 2.5a2.5 2.5 0 0 1 2.5 2.5v5a2.5 2.5 0 0 1-5 0V5A2.5 2.5 0 0 1 10 2.5z M5 9.5a5 5 0 0 0 10 0 M10 14.5v3 M7.5 17.5h5")
+    val touchpad = lineIcon("touchpad", "M3 4h14v9.5H3z M3 13.5h14v2.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z M10 13.5V17")
+    val gamepad = lineIcon("gamepad", "M6.5 6.5h7a4 4 0 0 1 4 4v1.5a2.8 2.8 0 0 1-5 1.7L11.4 12H8.6l-1.1 1.7a2.8 2.8 0 0 1-5-1.7v-1.5a4 4 0 0 1 4-4z M6 8.5v3 M4.5 10h3 M13 9.5h0 M14.5 11h0")
+    val send = lineIcon("send", "M3 5h5l1.5 2H17v9H3z M10 14.5v-5 M7.8 11.5 10 9.3l2.2 2.2")
+    val lock = lineIcon("lock", "M5 9h10v8H5z M7 9V6.5a3 3 0 0 1 6 0V9 M10 12v2")
+    val sleep = lineIcon("sleep", "M15.5 12.5A6.5 6.5 0 0 1 7.5 4.5a6.5 6.5 0 1 0 8 8z")
+    val dnd = lineIcon("dnd", "M10 2.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15z M6.5 10h7")
+    val bluetooth = lineIcon("bluetooth", "M6 6.5l8 7-4 3.5V3l4 3.5-8 7")
+    val pencil = lineIcon("pencil", "M4 16l1-4 8.5-8.5 3 3L8 15z M11.5 5.5l3 3")
+    val plus = lineIcon("plus", "M10 4.5v11 M4.5 10h11")
+    val minus = lineIcon("minus", "M5 10h10")
+    val left = lineIcon("left", "M12.5 4.5 7 10l5.5 5.5")
+    val right = lineIcon("right", "M7.5 4.5 13 10l-5.5 5.5")
+    val shield = lineIcon("shield", "M10 2.5l6 2.5v4.5c0 4-2.7 6.7-6 8-3.3-1.3-6-4-6-8V5z M7.5 10l2 2 3.5-3.5")
 }
 
 // A sidebar tile: the icon in white on its section's gradient (the Mac's `.tile`).
@@ -200,6 +240,18 @@ fun Dot(color: Color, size: Int = 8) = Box(Modifier.size(size.dp).clip(CircleSha
 // One sidebar entry (the Mac's `.nav-item`): tile, label, and a green dot when the feature is on.
 @Composable
 fun NavItem(icon: ImageVector, colors: List<Color>, label: String, selected: Boolean, on: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+    // Material 3 Expressive, as a navigation drawer has it: a pill, the selected one in the accent's
+    // soft tint; the icons stay the coloured tiles (as More's list has them).
+    if (Modern.on) return Row(
+        Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50)).alpha(if (enabled) 1f else 0.4f)
+            .background(if (selected) pal.accentSoft else Color.Transparent).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Tile(icon, colors, 28)
+        Text(label, color = pal.text, fontSize = 15.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 12.dp).weight(1f))
+        if (on) Dot(pal.good, 7)
+    }
     Row(
         Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(8.dp)).alpha(if (enabled) 1f else 0.4f)
             .background(if (selected) pal.accent else Color.Transparent).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 8.dp),
@@ -217,10 +269,17 @@ fun NavItem(icon: ImageVector, colors: List<Color>, label: String, selected: Boo
 // General › Appearance: Theme (System, Light, Dark) and the accent swatches, System first.
 @Composable
 fun AppearanceCard() {
+<<<<<<< HEAD
     MacCard("Appearance") {
         MacRow("Theme", "System follows this phone’s light or dark setting", first = true) {
             Row(Modifier.clip(RoundedCornerShape(8.dp)).background(pal.trackOff).padding(2.dp)) {
                 for ((v, label) in listOf("system" to "System", "light" to "Light", "dark" to "Dark")) {
+=======
+    MacCard(tr("Appearance")) {
+        MacRow(tr("Theme"), tr("System follows this phone’s light or dark setting"), first = true) {
+            Row(Modifier.clip(RoundedCornerShape(8.dp)).background(pal.trackOff).padding(2.dp)) {
+                for ((v, label) in listOf("system" to tr("System"), "light" to tr("Light"), "dark" to tr("Dark"))) {
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
                     val on = Look.theme == v
                     Text(label, color = if (on) pal.text else pal.muted, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                         modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(if (on) pal.card else Color.Transparent)
@@ -229,8 +288,13 @@ fun AppearanceCard() {
             }
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+<<<<<<< HEAD
             Text("Accent colour", color = pal.text, fontSize = 15.sp)
             Text("System uses this phone’s wallpaper colours", color = pal.muted, fontSize = 12.5.sp)
+=======
+            Text(tr("Accent colour"), color = pal.text, fontSize = 15.sp)
+            Text(tr("System uses this phone’s wallpaper colours"), color = pal.muted, fontSize = 12.5.sp)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
             val ctx = androidx.compose.ui.platform.LocalContext.current
             val sys = Look.system(ctx, isSystemInDarkTheme())
             Row(Modifier.padding(top = 10.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -249,6 +313,32 @@ fun AppearanceCard() {
     }
 }
 
+<<<<<<< HEAD
+=======
+// General › Language: the app's own language (I18n.kt); until one is picked, the phone's.
+@Composable
+fun LanguageCard(core: Core) {
+    MacCard(tr("Language")) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(tr("Language"), color = pal.text, fontSize = 15.sp)
+            Text(tr("The language TwinDesk uses on this phone"), color = pal.muted, fontSize = 12.5.sp)
+            // A list, not segments: five names don't fit side by side on a phone.
+            Column(Modifier.padding(top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(pal.trackOff).padding(2.dp)) {
+                for ((code, label) in I18n.LANGUAGES) {
+                    val on = I18n.lang == code
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (on) pal.card else Color.Transparent)
+                        .clickable { core.setLanguage(code) }.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(I18n.FLAGS[code].orEmpty(), fontSize = 18.sp, modifier = Modifier.padding(end = 10.dp))
+                        Text(label, color = if (on) pal.text else pal.muted, fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
+                        if (on) Text("✓", color = pal.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 @Composable
 fun PageHead(title: String, desc: String, master: Boolean? = null, onMaster: (Boolean) -> Unit = {}) {
     Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(bottom = 14.dp)) {
@@ -392,7 +482,7 @@ fun LayoutPicker(me: String, other: String, side: String, onPick: (String) -> Un
             Slot("right", Modifier.width(90.dp).height(100.dp))
         }
         Slot("bottom", Modifier.width(150.dp).height(44.dp))
-        val where = mapOf("left" to "to the left of", "right" to "to the right of", "top" to "above", "bottom" to "below")[side]
-        Text("$other is $where $me. Tap a side to move it.", color = pal.muted, fontSize = 13.sp, textAlign = TextAlign.Center)
+        val where = mapOf("left" to tr("to the left of"), "right" to tr("to the right of"), "top" to tr("above"), "bottom" to tr("below"))[side]
+        Text(tr("{other} is {where} {me}. Tap a side to move it.", "other" to other, "where" to where, "me" to me), color = pal.muted, fontSize = 13.sp, textAlign = TextAlign.Center)
     }
 }

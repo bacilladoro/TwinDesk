@@ -34,10 +34,21 @@
 // }
 'use strict';
 
+// Launch: the compiled code of every module after this one is kept on disk (Node's compile cache),
+// so the next start skips parsing them. Nothing changes if the cache can't be written.
+try {
+  const m = require('module');
+  if (typeof m.enableCompileCache === 'function') m.enableCompileCache();
+} catch {}
+
 let qrPair = null; // Connection's phone pairing QR code: {nonce, until}
 let adbQr = null; // wireless debugging's pairing QR code while shown (shared/adbqr.js)
 const qrKnows = (nonce) => !!qrPair && typeof nonce === 'string' && nonce === qrPair.nonce && Date.now() < qrPair.until;
 
+<<<<<<< HEAD
+=======
+const Engines = require('../shared/engines.js'); // General › Advanced › Engines in use
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 const { lanType } = require('../shared/lantype.js'); // Wi-Fi or Ethernet for Overview (#140)
 const path = require('path');
 const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, systemPreferences, Notification, dialog, globalShortcut } = require('electron');
@@ -105,6 +116,7 @@ let hud = null;
 let quitting = false;
 let startHidden = process.argv.includes('--hidden');
 let settings, id, server, pairing, discovery, link, peer, svc, actions, pairSync, updates;
+let web = null; // TwinDesk Web: this Mac as a page for iPhones and browsers (setupWeb)
 let phoneHub = null; // Calls, Messages and Photos (loadHub); svc.hub is the Mac's sound capture (audiohub.js)
 
 const state = {
@@ -202,7 +214,11 @@ function pushState() {
     state.client = c ? { id: c.deviceId, name: c.name, os: c.os, role: c.role, address: c.address, rttMs: c.rttMs, transport: c.transport || 'ip' } : null;
     if (svc && svc.net) {
       const hs = c && settings.net.hotspots[c.deviceId];
+<<<<<<< HEAD
       state.net = { ...svc.net.view, ble: settings.net.ble !== false, blePc: settings.net.blePc === true, bleWifiOff: settings.net.bleWifiOff !== false, bleOff, radio: svc.ble.state, hotspotSsid: hs ? hs.ssid : '', hotspotSaved: !!(hs && hs.pass), lan: lanType(c && c.address) };
+=======
+      state.net = { ...svc.net.view, ble: settings.net.ble !== false, blePc: settings.net.blePc === true, bleWifiOff: settings.net.bleWifiOff !== false, bleOff, radio: svc.ble.state, hotspotSsid: hs ? hs.ssid : '', hotspotSaved: !!(hs && hs.pass), lan: lanType(c && c.address), tailscale: settings.net.tailscale !== false, tailnet: require('../shared/tailnet.js').mine(), bleInput: settings.net.bleInput === true };
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     }
     const { helper, displays, stream, clipboard: clip, kvm } = svc || {};
     state.helper.running = !!(helper && helper.running);
@@ -214,6 +230,10 @@ function pushState() {
         remote: settings.sharing.remote !== false,
         pace: settings.sharing.pace || 'fast',
         codec: settings.sharing.codec || 'h264', // Encoder (shared/screencodec.js)
+<<<<<<< HEAD
+=======
+        fps: settings.sharing.fps || 0, // Frame rate (stream.js)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         displayId: settings.sharing.displayId,
         bitrateMbps: settings.bitrateMbps,
         streamMaxHeight: settings.streamMaxHeight,
@@ -243,6 +263,11 @@ function pushState() {
     state.look = Look.view(settings.ui, systemPreferences); // General › Appearance
     state.app = settings.app;
     if (kvm) state.input = kvm.view;
+    // General › Advanced › Engines in use (shared/engines.js), while connected.
+    state.engines = peer ? Engines.snapshot({
+      current: c, il: peer.il, lane: peer.lane(), fx: peer.fx, fx2: peer.fx2, net: svc && svc.net ? svc.net.view : null,
+      lan: state.net ? state.net.lan : '', screen: svc && svc.stream && svc.stream.active ? svc.stream.view : null,
+    }) : null;
     if (kvm && lockKey) {
       lockKey.sync(kvm.server.current ? settings.keys.lockKeys : '');
       state.input.lockError = lockKey.error;
@@ -262,14 +287,15 @@ function pushState() {
     if (svc) state.wake = svc.wake.view;
     if (svc && svc.phone) {
       // A phone's controls on Overview (dev.state): quick settings, volume and ringer, most used apps.
-      const v = svc.devctl && state.client && state.client.os === 'android' ? svc.devctl.view : null;
+      const v = svc.devctl && state.client && P.isPhoneOs(state.client.os) ? svc.devctl.view : null; // an iPhone's too: Ring (its Overview, shared/ui-device-ios.js)
       state.phone = { ...svc.phone.view, settings: settings.phone, ctl: v, qs: v ? v.qs || null : null, top: v ? v.top || [] : [] };
     }
-    state.peerCtl = svc && svc.devctl && state.client && state.client.os !== 'android' ? svc.devctl.view : null; // a computer's controls on Overview
+    state.peerCtl = svc && svc.devctl && state.client && !P.isPhoneOs(state.client.os) ? svc.devctl.view : null; // a computer's controls on Overview
     if (svc && svc.phoneDrive) state.mount = { ...svc.phoneDrive.view, on: !!settings.mount.on };
     // Calls, Messages and Photos: the settings alone until the hub is loaded (setupHub).
     state.hub = phoneHub ? phoneHub.view : { ...settings.hub, connected: false };
     if (updates) state.updates = updates.view;
+    state.web = web ? web.view() : { cfg: { ...settings.web }, devices: [] }; // TwinDesk Web (shared/web/webwire.js)
     if (pairSync) pairSync.check();
     sendScreenState();
     if (win && !win.isDestroyed()) win.webContents.send('state', state);
@@ -360,16 +386,14 @@ function clearStalePermissions() {
       !p.accessibility && 'Accessibility',
       p.inputMonitoring === false && 'ListenEvent',
     ].filter(Boolean);
-    const id = 'org.macshare.mac';
-    let left = services.length;
-    const done = () => {
+    const done = (resetErr) => {
+      if (resetErr) return console.warn(`[permissions] reset skipped or failed: ${resetErr.message}`);
       settings.app.signature = m[1];
       store.saveSettings(settings);
       refreshPermissions();
     };
-    if (!left) return done();
-    console.log(`[permissions] new signature: resetting ${services.join(', ')}`);
-    for (const svcName of services) require('child_process').execFile('/usr/bin/tccutil', ['reset', svcName, id], () => --left || done());
+    if (services.length) console.log(`[permissions] new signature: resetting ${services.join(', ')}`);
+    require('./permission-reset').resetMissing(bundle, services, require('child_process').execFile, done);
   });
 }
 
@@ -381,16 +405,18 @@ function setupSeen() {
   store.saveSettings(settings);
 }
 
-// The window exists only while it's open: closing it (to the menu bar) frees its page, about
-// 50-100 MB; opening it again makes it anew (showWindow).
+// A new language restarts TwinDesk: every window then loads English and that language only
+// (shared/lang/pick.js), not every catalog. Settings are already saved (synchronously).
 function changeLanguage() {
-  i18n = I18n.create(I18n.resolveLanguage(settings.ui.language, app.getLocale()));
-  for (const player of BrowserWindow.getAllWindows()) {
-    if (!player.isDestroyed()) player.webContents.send('ui-language', i18n.locale);
-  }
-  trayKey = '';
-  updateTray();
-  if (win && !win.isDestroyed()) win.loadFile(path.join(__dirname, 'control.html'), { query: { language: i18n.locale } });
+  app.relaunch();
+  app.quit(); // as Quit does: before-quit gives everything back (KVM, calls, the helper)
+}
+
+// General › Appearance changed: the theme; the window's vibrancy only for Simple (Glass paints its
+// gradient over the whole window, the sidebar a frosted pane on it, so a blur under it would show nothing).
+function applyLook() {
+  Look.applyTheme(nativeTheme, settings.ui.theme);
+  if (win && !win.isDestroyed()) win.setVibrancy(Look.style(settings.ui.style) === 'glass' ? null : 'sidebar');
 }
 
 function createWindow() {
@@ -402,7 +428,7 @@ function createWindow() {
     title: 'TwinDesk',
     show: false,
     titleBarStyle: 'hiddenInset', // the sidebar runs up under the traffic lights
-    vibrancy: 'sidebar',
+    vibrancy: Look.style(settings.ui.style) === 'glass' ? undefined : 'sidebar', // Simple's (applyLook)
     visualEffectState: 'active',
     backgroundColor: '#00000000',
     webPreferences: {
@@ -414,7 +440,7 @@ function createWindow() {
   win.webContents.on('console-message', (e) => {
     if (e.level === 'warning' || e.level === 'error') console.log(`[window] ${e.level}: ${e.message}`);
   });
-  win.loadFile(path.join(__dirname, 'control.html'), { query: { language: i18n.locale } });
+  win.loadFile(path.join(__dirname, 'control.html'), { query: { language: i18n.locale, look: Look.style(settings.ui.style) } });
   win.once('ready-to-show', showWindow);
   // In the Dock and ⌘-Tab only while the window is open; menu bar only otherwise.
   const w = win;
@@ -486,13 +512,13 @@ let trayKey = '';
 function updateTray() {
   if (!tray) return;
   const c = state.client;
-  const phone = !!(c && c.os === P.OS.ANDROID);
+  const phone = !!(c && P.isPhoneOs(c.os));
   const name = c ? c.name : t('Other Computer');
   const k = settings.kvm;
   const where = state.input && state.input.where;
   const found = (state.found || []).filter((d) => !c || d.id !== c.id);
   const phoneView = !!(phone && svc && svc.phoneViews.list().some((v) => v.kind === 'screen'));
-  const OS = { mac: 'Mac', linux: 'Linux', android: t('Phone') };
+  const OS = { mac: 'Mac', linux: 'Linux', android: t('Phone'), ios: 'iPhone' };
   const g = (svc && link && link.view()) || { status: {}, hosts: [] };
   const again = !c && g.hosts.length && (g.status.state === 'stopped' || !!g.status.busy);
   const key = JSON.stringify([c && c.name, c && c.transport, phone, again, where, k.linked, k.ble, svc && svc.kvm.locked, settings.keys.lockKeys, k.driveOther, k.beDriven, settings.sharing.on, displayMode(),
@@ -553,6 +579,12 @@ app.whenReady().then(() => {
   store.init(app.getPath('userData'));
   settings = store.loadSettings();
   require('../shared/inputlane.js').setLaneProtocol(settings.app.inputProtocol); // General › Advanced, before any lane binds
+<<<<<<< HEAD
+=======
+  // Quiet links (#143): an idle session stops pinging every second; General › Advanced › Keep pinging.
+  require('../shared/quiet.js').use(() => !!(settings && settings.app && settings.app.keepPinging === true));
+  require('../shared/tailnet.js').use(() => !(settings && settings.net && settings.net.tailscale === false)); // General › Tailscale (#161)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   i18n = I18n.create(I18n.resolveLanguage(settings.ui.language, app.getLocale()));
   id = identity.load(settings);
   Object.assign(state, { macName: id.macName, macId: id.macId, fp: id.fp, version: app.getVersion(), about: aboutInfo(app) });
@@ -601,6 +633,14 @@ app.whenReady().then(() => {
   pairing.on('request', showWindow);
   peer = new Peer(server, link);
   peer.setPlain(settings.files.plain === true); // Files › Encrypt file transfers
+<<<<<<< HEAD
+=======
+  // The files engine (shared/fx2.js) stays up while another TwinDesk computer is on the network: a
+  // session with it then starts without waiting for it. Alone, it isn't running at all.
+  const fx2Nearby = () => { if (peer.fx2) peer.fx2.need('nearby', discovery.found.size > 0); };
+  discovery.on('change', fx2Nearby);
+  fx2Nearby();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   peer.on('client', (ctx) => {
     console.log(`[peer] session with ${ctx.name} (${ctx.os}, ${ctx.role === 'host' ? 'we are its guest' : 'it is our guest'})`);
     peer.send(ctx, { t: P.T.STREAM_INPUT, on: settings.streamInput !== false });
@@ -629,15 +669,26 @@ app.whenReady().then(() => {
   svc.phone = new Phone({ server: peer, raw: server, discovery, pairing });
   svc.phone.on('change', pushState);
   // The phone's Keyboard page names this Mac's hotkey (double-tap = everything back here).
-  peer.on('client', (ctx) => ctx.os === P.OS.ANDROID && peer.sendToClient({ t: 'phone.mac', hotkey: P.hotkeyName(settings.keys.hotkey || P.HOTKEY_MAC) }));
+  peer.on('client', (ctx) => P.isPhoneOs(ctx.os) && peer.sendToClient({ t: 'phone.mac', hotkey: P.hotkeyName(settings.keys.hotkey || P.HOTKEY_MAC) }));
   // The phone's screen, input, clipboard and app windows, through wireless debugging.
   svc.phone.bridge = new PhoneBridge({ server: peer, phone: svc.phone, getSettings: () => settings, clipboard: svc.clipboard });
   svc.phone.bridge.on('change', pushState);
   svc.phone.bridge.on('save', () => store.saveSettings(settings));
   // A phone on a USB cable: pairing, the session, screen and sound through it (no Wi-Fi needed).
   svc.wired = new Wired({ adb: svc.phone.bridge.adb, raw: server, peer, getId: () => id.macId, getName: () => id.macName });
+  // An iPhone's or iPad's session through its USB cable (iosnet.js: usbmuxd to the app's port): this
+  // server, the WebRTC relay (wired.js) and the files engine, nothing else.
+  {
+    const { IosNet } = require('../shared/iosnet.js');
+    svc.iosNet = new IosNet({
+      getId: () => id.macId, getName: () => id.macName,
+      allowed: (port) => port === P.PORT || port === svc.wired.turnPort || (!!server.fx2Port && port === server.fx2Port()),
+    });
+    svc.iosNet.on('change', () => { if (svc.iosNet.view.devices.some((d) => d.app)) svc.wired.relay(); pushState(); });
+  }
   pairing.isWired = (nonce) => svc.wired.knows(nonce) || qrKnows(nonce); // the cable, or Connection's QR code (Allow only)
   pairing.isQr = qrKnows;
+  pairing.consumeQr = () => { qrPair = null; }; // a QR pairing that went through: the link is single-use
   // Overview's controls of the other device, and this Mac's for it (shared/devctl.js): the session
   // is peer.js here, its 'client' the start.
   const { DevCtl } = require('../shared/devctl.js');
@@ -713,6 +764,14 @@ app.whenReady().then(() => {
     return svc.nowPlaying;
   };
   svc.loadNowPlaying();
+<<<<<<< HEAD
+=======
+  // …and what plays on this Mac, for the phone's Media page and its media notification (shared/pcnow.js).
+  svc.pcNow = new (require('../shared/pcnow.js').PcNow)({ server: peer, key: (code) => {
+    svc.helper.send('inject', { ev: { t: P.T.K_KEY_DOWN, code } });
+    svc.helper.send('inject', { ev: { t: P.T.K_KEY_UP, code } });
+  } });
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   // Audio › Microphone (shared/mic.js): loaded the first time one of its switches is on.
   svc.loadMic = () => {
     if (svc.mic || !(settings.audio.micSend || settings.audio.micReceive)) return svc.mic || null;
@@ -724,13 +783,11 @@ app.whenReady().then(() => {
   svc.loadMic();
   // Camera tab: the cameras of the two computers (shared/camshare.js; a phone's is phoneViews.openCamera),
   // loaded only while Camera is on. ipc reaches them through svc.cam() (its ctx is a copy of svc).
-  svc.loadCamera = () => {
-    if (svc.camShare || settings.camera.on === false) return svc.camShare || null;
-    const { CamShare } = require('../shared/camshare.js');
+  // Camera › Virtual camera (shared/vcam.js, vcam.js): the running camera's picture also goes to a
+  // camera apps can pick. Also loaded by itself for a web device's camera (TwinDesk Web).
+  svc.loadVcam = () => {
+    if (svc.vcam) return svc.vcam;
     const { VirtualCam } = require('../shared/vcam.js');
-    const computer = () => !!peer.current && peer.current.os !== P.OS.ANDROID;
-    // Camera › Virtual camera (shared/vcam.js, vcam.js): the running camera's picture also goes to a
-    // camera apps can pick.
     svc.vcam = new VirtualCam({
       driver: require('./vcam'),
       cfg: () => settings.camera,
@@ -740,6 +797,15 @@ app.whenReady().then(() => {
       ui: () => win,
     });
     svc.phoneViews.vcam = svc.vcam;
+    svc.vcam.check();
+    return svc.vcam;
+  };
+  svc.loadCamera = () => {
+    if (svc.camShare || settings.camera.on === false) return svc.camShare || null;
+    const { CamShare } = require('../shared/camshare.js');
+    // A computer, or an iPhone (its app shares its camera the same way); an Android phone's goes through adb.
+    const computer = () => !!peer.current && peer.current.os !== P.OS.ANDROID;
+    svc.loadVcam();
     svc.camShare = new CamShare({
       getLanguage: () => i18n.locale,
       link: {
@@ -755,7 +821,6 @@ app.whenReady().then(() => {
       peerName: () => (peer.current && peer.current.name) || 'the other computer',
       onChange: pushState,
     });
-    svc.vcam.check();
     svc.camShare.sendPolicy(); // connected already: the other computer hears whether it's shared
     return svc.camShare;
   };
@@ -788,9 +853,9 @@ app.whenReady().then(() => {
   svc.kvm.local = svc.phone.bridge;
   // The phone's Remote page: touchpad, keyboard and gamepad here, taken only with the mouse at home.
   // No Real gamepad: a virtual controller on macOS needs a DriverKit driver, which needs Apple's paid signing.
-  // Loaded only while Remote is on (off, its page hears so); ipc reaches it through svc.remote().
+  // Loaded only while Remote or Keyboard (voice typing) is on (both off, its page hears so); ipc reaches it through svc.remote().
   svc.loadRemote = () => {
-    if (svc.phoneRemote || settings.remote.allow === false) return svc.phoneRemote || null;
+    if (svc.phoneRemote || (settings.remote.allow === false && !settings.kvm.keyboard)) return svc.phoneRemote || null;
     const { PhoneRemote } = require('../shared/phone-remote.js');
     svc.phoneRemote = new PhoneRemote({ server: peer, helper: svc.helper, getSettings: () => settings, atHome: () => svc.kvm.mode === 'home', onChange: pushState,
       padNote: 'Real gamepad isn’t on the Mac. To use {name} as a gamepad, turn on Remote › As a Bluetooth gamepad on {name}, then pair it with this Mac in System Settings › Bluetooth' });
@@ -798,8 +863,8 @@ app.whenReady().then(() => {
     return svc.phoneRemote;
   };
   svc.remote = () => svc.phoneRemote || null;
-  peer.on(`t:${P.T.REMOTE_HELLO}`, () => !svc.phoneRemote && peer.current && peer.current.os === P.OS.ANDROID
-    && peer.sendToClient({ t: P.T.REMOTE_STATE, allowed: false, off: true, why: 'Remote is off on this computer: turn it on in TwinDesk’s Remote page there' }));
+  peer.on(`t:${P.T.REMOTE_HELLO}`, () => !svc.phoneRemote && peer.current && P.isPhoneOs(peer.current.os)
+    && peer.sendToClient({ t: P.T.REMOTE_STATE, allowed: false, off: true, why: 'Remote is off on this computer: turn it on in TwinDesk’s Remote page there', voice: false, voiceWhy: P.KEYBOARD_OFF }));
   svc.loadRemote();
   // ReZume: what's in use here goes on on the other device, and theirs here (shared/rezume.js), its
   // offers in the Dock (a Dock icon of their app, dockstub.js), the menu bar and a notification.
@@ -822,6 +887,18 @@ app.whenReady().then(() => {
       },
       cfg: () => settings.rezume,
       detect: () => svc.rzAct.detect(),
+      // Looks only when the app or window in front changed (the helper's frontWatch), not every 1.5 s.
+      watch: (() => {
+        let fn = null;
+        const onEvent = (n) => n === 'front' && fn && fn();
+        const arm = () => fn && svc.helper.request('frontWatch', { on: true }).catch(() => {});
+        svc.helper.on('event', onEvent);
+        svc.helper.on('ready', arm); // a restarted helper watches again
+        return {
+          start: (f) => { fn = f; return svc.helper.request('frontWatch', { on: true }).then((r) => !!r.ax); },
+          stop: () => { fn = null; svc.helper.send('frontWatch', { on: false }); },
+        };
+      })(),
       appIcon: (a) => svc.rzAct.appIcon(a),
       open: { url: (u) => shell.openExternal(u), file: (p) => shell.openPath(p), phoneApp: (pkg) => openPhoneApp(pkg) },
       sendFile: (p, batch) => !!svc.fileSend.sendBatch([p], 'rezume', batch),
@@ -891,12 +968,17 @@ app.whenReady().then(() => {
     cursor: (dir, on) => actions.setKvm({ [dir === 'out' ? 'driveOther' : 'beDriven']: on }),
     rezume: (dir, on) => actions.setRezume({ [dir === 'out' ? 'send' : 'receive']: on }),
     remote: (dir, on) => actions.setRemote({ allow: on }),
+    mic: (dir, on) => actions.setAudio({ micReceive: on }),
     terminal: (dir, on) => { actions.setTerminal({ [dir === 'out' ? 'allowPc' : 'connectPc']: on }); if (dir === 'in') svc.sshClient.applySettings(); }, // already set: setTerminal sees no change
     files: (dir, on) => actions.setFiles({ acceptDrops: on }),
   };
   pairSync = new PairSync({ server: peer, getSettings: () => settings, saveSettings: () => store.saveSettings(settings),
     apply: (f, dir, on) => (f !== 'value' ? SYNC_ACTIONS[f](dir, on)
       : dir === 'rezume' ? actions.setRezume({ on })
+<<<<<<< HEAD
+=======
+        : dir === 'res' ? actions.setStreamMaxHeight(on)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         : ['gestures', 'ble', 'keyboard', 'speed', 'reverseScroll', 'syncPads'].includes(dir) ? actions.setKvm({ [dir]: on }) : actions.setSharingOpts({ [dir]: on })) });
   // New releases on GitHub: a notification once per version, the menu bar item and About › Updates.
   updates = new Updates({
@@ -915,9 +997,17 @@ app.whenReady().then(() => {
   nativeTheme.on('updated', () => pushState());
   // The system accent colour changed (General › Appearance › System follows it).
   try { systemPreferences.subscribeNotification('AppleColorPreferencesChangedNotification', () => pushState()); } catch {}
+<<<<<<< HEAD
   actions = setupIpc({ state, settings, pushState, onLanguage: changeLanguage, onLook: () => Look.applyTheme(nativeTheme, settings.ui.theme), t, server: peer, pairing, discovery, link, ...svc, hub: loadHub, login, refreshPermissions, updates });
+=======
+  setupWeb();
+  actions = setupIpc({ state, settings, pushState, onLanguage: changeLanguage, onLook: applyLook, t, server: peer, pairing, discovery, link, ...svc, hub: loadHub, login, refreshPermissions, updates });
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'assets', 'trayTemplate.png'))); // "Template": macOS tints it
   hud = new Hud(() => settings);
+  hud.keep = () => !!peer.current; // the popup's window lives while a session is on (mac/hud.js)
+  peer.on('client', () => hud.warm());
+  peer.on('closed', () => !peer.current && hud.idle());
   svc.kvm.on('where', (mode) => {
     svc.pcApps.setDriven(mode === 'driven'); // a moved window's copy shows this Mac's pointer then
     const name = peer.current ? peer.current.name : { key: 'the other computer' };
@@ -984,7 +1074,14 @@ app.whenReady().then(() => {
   // Files on their way, live: the percentage beside the menu bar icon, ↓ coming in, ↑ going out
   // (macOS notifications have no progress bar, and TwinDesk has no Dock icon to put one on).
   let trayPct = '';
+<<<<<<< HEAD
   setInterval(() => {
+=======
+  // Every 500 ms while a session is on (files move only then) and until what it showed is cleared;
+  // with no session nothing runs. A new session starts it again.
+  let pctTimer = null;
+  const pctTick = () => {
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     const dv = svc.drop.view;
     const sv = svc.fileSend.view;
     const sum = (list, k) => list.reduce((a, f) => [a[0] + (f[k] || 0), a[1] + (f.size || 0)], [0, 0]);
@@ -1009,41 +1106,71 @@ app.whenReady().then(() => {
     }
     if (sb) liveShow('send', t('Sending {file}', { file: sb.items > 1 ? t('{count} items', { count: sb.items }) : sb.name }), t('To {name}', { name: peerLabel() }));
     const title = (gotOf ? ` ↓${pct(got, gotOf)}%` : '') + (sentOf ? ` ↑${pct(sent, sentOf)}%` : '');
+<<<<<<< HEAD
     if (title === trayPct || !tray) return;
     trayPct = title;
     tray.setTitle(title, { fontType: 'monospacedDigit' });
   }, 500).unref();
+=======
+    if (!peer.current && !title && !rb && !sb && !dv.inBatches.length && !sv.outBatches.length) { clearInterval(pctTimer); pctTimer = null; }
+    if (title === trayPct || !tray) return;
+    trayPct = title;
+    tray.setTitle(title, { fontType: 'monospacedDigit' });
+  };
+  const pctStart = () => { if (!pctTimer) { pctTimer = setInterval(pctTick, 500); pctTimer.unref(); } };
+  peer.on('client', pctStart);
+  peer.on('closed', pctStart); // once more: what it showed is cleared, then it stops
+  if (peer.current) pctStart();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   // Started at login: in the menu bar only; the window is made when it's first opened.
   if (startHidden) startHidden = false;
   else createWindow();
   refreshPermissions();
   if (process.env.MACSHARE_DEV_TEST) require('./dev/m2m')({ role: process.env.MACSHARE_DEV_TEST, svc, actions, link, pairing, peer });
   readDefaultIf();
+  // Addresses change when the network does. With the window open: every 5 s as always (it shows
+  // them, and the link's round trip). Without it: only when an address changed (one getifaddrs, no
+  // process), and the default route is read again then.
+  let addrKey = '';
   setInterval(() => {
+    const key = interfaces().map((i) => `${i.name}=${i.address}`).join(',');
+    const changed = key !== addrKey;
+    addrKey = key;
+    if (!changed && !(win && !win.isDestroyed() && win.isVisible())) return;
     readDefaultIf();
     pushState();
-  }, 5000); // addresses change when the network does
+  }, 5000).unref();
   // While Setup shows something missing, notice the grant without waiting for a window focus.
   setInterval(() => {
+    if (!win || win.isDestroyed() || !win.isVisible()) return;
     const p = state.permissions;
     const missing = p.screen !== 'granted' || !p.accessibility || p.inputMonitoring === false;
-    if (missing && win && !win.isDestroyed() && win.isVisible()) refreshPermissions();
-  }, 3000);
+    if (missing) refreshPermissions();
+  }, 3000).unref();
 });
 
 // Not on one network: the session through Bluetooth (this Mac advertises; phones and PCs connect),
 // and Wi-Fi for files and screens (netlink.js): this Mac joins the other side's Wi-Fi Direct group or
 // access point for a while, or, for a phone's screen, its hotspot (the banner asks for it).
+let iosInvitedAt = 0;
 let bleOff = false; // General's Turn off Bluetooth on Wi-Fi connections, in effect (bleQuiet)
 const bleQuiet = wifiQuiet();
 
 function setupNet() {
   const { safeStorage } = require('electron');
+  const iosNow = () => !!peer.current && peer.current.os === P.OS.IOS;
   svc.ble = new BleHost({
     helper: svc.helper, server,
     info: () => ({ id: id.macId, name: id.macName.slice(0, 40), os: P.OS.MAC, port: server.port, fp: id.fp }),
     enabled: () => !bleOff && (settings.net.ble !== false || settings.net.blePc === true),
-    accept: (g) => (g.os === P.OS.ANDROID ? settings.net.ble !== false : settings.net.blePc === true), // General's two Bluetooth switches
+    accept: (g) => (P.isPhoneOs(g.os) ? settings.net.ble !== false : settings.net.blePc === true), // General's two Bluetooth switches
+    // Quiet on Wi-Fi with an iPhone or iPad in the session or linked: its link stays (idle, slow, no
+    // advertising: the helper's bleHold), as it's what wakes TwinDesk there when iOS suspends it and
+    // what the session falls back to. Advertising comes back only if that link drops.
+    hold: () => settings.net.ble !== false && (iosNow() || svc.ble.list().some((g) => g.os === P.OS.IOS)),
+    // …but advertising until the iPhone or iPad in the session has linked (another device's link
+    // kept it silent: an iPhone paired over Wi-Fi never found it, and fell back to nothing).
+    holdAds: () => iosNow() && !svc.ble.list().some((g) => g.id === peer.current.deviceId),
   });
   svc.ble.on('change', pushState);
   // PCs nearby that aren't on this network (not paired yet: they haven't connected to say hello).
@@ -1054,14 +1181,25 @@ function setupNet() {
     // The session on the same Wi-Fi a while (General's Turn off Bluetooth on Wi-Fi connections,
     // blepolicy.js wifiQuiet): no advertising, its pipes and the session's Bluetooth fallback closed;
     // back as it was when the session ends.
-    const off = bleQuiet({ on: settings.net.bleWifiOff !== false, current: () => peer.current, onGroup: () => !!svc.net && svc.net.onGroup });
+    peer.useBleInput(settings.net.bleInput === true); // Cursor › Mouse and keyboard over Bluetooth (shared/bleinput.js)
+    const off = bleQuiet({ on: settings.net.bleWifiOff !== false && settings.net.bleInput !== true, current: () => peer.current, onGroup: () => !!svc.net && svc.net.onGroup });
     if (off !== bleOff) {
       bleOff = off;
       console.log(`[ble] ${off ? 'off: the session is on the same Wi-Fi' : 'on again'}`);
       svc.ble.apply();
       pushState();
     }
+    else if (off) svc.ble.apply(); // an iPhone linked or gone while quiet: held or stopped (hold)
     svc.bleLook.look(settings.net.blePc === true && !peer.current);
+    // No session, and an iPhone or iPad linked over Bluetooth (it links only to computers it's paired
+    // with): invited now and then, which wakes TwinDesk there to come back (Ble.swift).
+    if (!peer.current && Date.now() - iosInvitedAt > 20000) {
+      for (const g of svc.ble.list()) {
+        if (g.os !== P.OS.IOS) continue;
+        iosInvitedAt = Date.now();
+        svc.ble.invite(g.id);
+      }
+    }
   }, 3000).unref();
   discovery.extra = {
     list: () => {
@@ -1103,6 +1241,23 @@ function setupNet() {
   svc.net.on('dropped', () => settings.sharing.on && actions.setSharing(false)); // Bluetooth can't carry the screen
   peer.hold = (m) => svc.net.holdOut(m, (x) => peer.sendNow(x));
   peer.tap = (m) => svc.net.onMessage(m);
+  peer.fx.active = () => svc.net.touch('files'); // fast files on a link made for them keep it up, as file.chunk does
+
+  // A faster way to move files failed and a slower one took over (#143): said once per way per run,
+  // with why (also in Settings › General › Advanced › Engines in use).
+  const fellBack = new Set();
+  peer.fx.onFallback = (o) => {
+    const key = o.from + '>' + o.to;
+    if (fellBack.has(key)) return;
+    fellBack.add(key);
+    const slow = { fx: t('the older fast way'), 'file.chunk': t('the slowest way, through the session') }[o.to] || o.to;
+    const title = t('Files go {way} for now', { way: slow });
+    const why = { why: o.why || t('no reason given') };
+    const body = o.to === 'file.chunk'
+      ? t('The faster way failed: {why}. TwinDesk tries it again when it next connects. Settings › General › Advanced › Engines in use', why)
+      : t('The faster way failed: {why}. TwinDesk tries it again in a minute. Settings › General › Advanced › Engines in use', why);
+    try { new Notification({ title, body }).show(); } catch {}
+  };
   peer.on('client', () => svc.net.started());
   peer.on('closed', () => svc.net.ended());
   peer.on('transport', () => {
@@ -1151,7 +1306,7 @@ function setupNet() {
 // listener, nothing sent to the phone. The call window (shared/callwin.js) only with a call.
 function setupHub() {
   const anyOn = () => settings.hub.calls || settings.hub.messages || settings.hub.media || settings.hub.files || settings.hub.shareServe;
-  peer.on('client', (ctx) => ctx.os === P.OS.ANDROID && !phoneHub && anyOn() && loadHub());
+  peer.on('client', (ctx) => P.isPhoneOs(ctx.os) && !phoneHub && anyOn() && loadHub());
   // The phone shares a folder: loaded for it (its listener comes with it, so this one passes it on).
   peer.on(`t:${P.T.SHARE_OFFER}`, (m, ctx) => ctx && ctx.os === P.OS.ANDROID && !phoneHub && loadHub().share && phoneHub.share.onOffer(m));
   peer.on(`t:${P.T.SHARE_SET}`, (m, ctx) => ctx && ctx.os === P.OS.ANDROID && !phoneHub && loadHub().share && phoneHub.share.act('serve', { on: !!m.serve }));
@@ -1187,11 +1342,108 @@ function loadHub() {
   };
   hub.on('call', popup);
   hub.on('change', popup);
-  if (peer.current && peer.current.os === P.OS.ANDROID) hub.started();
+  if (peer.current && P.isPhoneOs(peer.current.os)) hub.started();
   return hub;
 }
 
 // The window on one page (the call window's name opens Calls).
+// TwinDesk Web (shared/web/webwire.js): this Mac as a page for iPhones, iPads and any browser, its own
+// server beside the TwinDesk session. Each web device has its own pages in the sidebar.
+function setupWeb() {
+  const { ipcMain, screen, shell } = require('electron');
+  const { startWeb } = require('../shared/web/webwire.js');
+  const { Input } = require('./input');
+  const { PhoneRemote } = require('../shared/phone-remote.js');
+  const { DevLocal } = require('../shared/devlocal.js');
+  const apple = (c) => !!c && ['ios', 'ipados', 'mac'].includes(c.os);
+  web = startWeb({
+    dir: app.getPath('userData'), root: path.join(__dirname, '..'), t,
+    settings: () => settings, save: () => store.saveSettings(settings), pushState,
+    self: () => ({ id: id.macId, name: id.macName, os: 'mac', version: app.getVersion() }),
+    receivedDir: () => settings.files.folder || app.getPath('downloads'),
+    say: (title, body, onClick) => {
+      if (!Notification.isSupported()) return;
+      try {
+        const n = new Notification({ title, body });
+        if (onClick) n.on('click', onClick);
+        n.show();
+      } catch {}
+    },
+    reveal: (p) => shell.showItemInFolder(p),
+    open: (p) => shell.openPath(p),
+    // Audio › Capture engine: the helper's (ScreenCaptureKit, before the volume: it can mute this Mac)
+    // or Chromium's (macOS 14.2+, after the volume: no mute; switched on at launch).
+    capture: {
+      audio: () => (require('./audiohub.js').loopback() ? 'loopback' : 'helper'),
+      hub: svc.hub, worklet: path.join(__dirname, 'pcm-worklet.js'),
+      engines: {
+        list: () => [
+          { id: 'helper', label: t('TwinDesk Helper'), hint: t('Captures with ScreenCaptureKit before the volume control, so this Mac can be muted while its sound plays elsewhere.'), mute: true },
+          ...(require('./audiohub.js').loopbackAvailable() ? [{ id: 'system', label: t('macOS'), hint: t('Chromium’s built-in capture. This Mac can’t be muted while sending, and its own playback of other devices is left out.'), mute: false }] : []),
+        ],
+        get: () => (settings.audio.engine === 'system' ? 'system' : 'helper'),
+        set: (v) => { settings.audio.engine = v === 'system' ? 'system' : 'helper'; store.saveSettings(settings); },
+        mute: () => !!settings.audio.muteLocal,
+        setMute: (v) => { settings.audio.muteLocal = !!v; store.saveSettings(settings); svc.hub.applyMute(); },
+        restart: () => (settings.audio.engine === 'system' ? 'system' : 'helper') !== require('./audiohub.js').engineAtStart(),
+      },
+    },
+    // Extend: the virtual display, in the web device's shape, while this Mac's screen isn't shared
+    // with the other computer (that one is the session's then).
+    extend: {
+      can: () => !settings.sharing.on && !!svc.helper.running,
+      async display(dev) {
+        svc.displays.setOverride(dev && dev.w > 0 && dev.h > 0 ? { width: dev.w, height: dev.h } : null);
+        await svc.displays.hold('web', true);
+        const vid = svc.displays.virtualId;
+        return (vid !== null && screen.getAllDisplays().find((d) => d.id === vid)) || null;
+      },
+      release() {
+        svc.displays.hold('web', false);
+        if (!settings.sharing.on) svc.displays.setOverride(null);
+      },
+    },
+    input: (bus, target) => new Input(bus, svc.helper, { target: () => target() }, {
+      enabled: () => settings.web.control !== false,
+      swapKeys: () => !apple(bus.current) && settings.keys.swapCtrlCmd !== false, // an iPhone's keyboard has ⌘ already
+    }),
+    remote: (bus, getSettings) => new PhoneRemote({ server: bus, helper: svc.helper, getSettings, atHome: () => svc.kvm.mode === 'home', onChange: pushState,
+      padNote: 'Real gamepad isn’t on the Mac: the gamepad’s buttons work as keys' }),
+    notifs: svc.notifs,
+    devLocal: (svc.devctl && svc.devctl.local) || new DevLocal(),
+    smbInfo: () => {
+      const c = settings.smb;
+      const pw = c.sharing ? svc.smb.password() : '';
+      if (!pw) return { on: false };
+      const host = web ? web.hub.host : `${require('os').hostname()}`;
+      return { on: true, host, share: 'MacShare', user: 'macshare', password: pw, path: c.folder || path.join(require('os').homedir(), 'MacShare'), url: `smb://${host}/MacShare` };
+    },
+    key: (code) => {
+      svc.helper.send('inject', { ev: { t: P.T.K_KEY_DOWN, code } });
+      svc.helper.send('inject', { ev: { t: P.T.K_KEY_UP, code } });
+    },
+    vcam: () => svc.loadVcam(),
+    fileClip: svc.fileClip,
+    share: {
+      view: () => {
+        const v = svc.smb.view;
+        return { on: !!settings.smb.sharing, busy: v.shareBusy ? 'setup' : '', error: v.shareError || '', folder: settings.smb.folder || v.defaultFolder, name: 'MacShare', user: 'macshare' };
+      },
+      set: (on) => (on ? svc.smb.startSharing() : svc.smb.stopSharing()),
+      async choose(folder) {
+        if (settings.smb.sharing) await svc.smb.stopSharing();
+        settings.smb.folder = folder;
+        store.saveSettings(settings);
+        svc.smb.startSharing(folder);
+      },
+    },
+  });
+  // The shared folder's sign-in changed (AirPlay & SMB): the pages that show it hear.
+  svc.smb.on('change', () => web.hub.running && web.hub._all(web.hub._mount()));
+  for (const [name, fn] of Object.entries(web.actions)) ipcMain.on(name, (_e, arg) => fn(arg));
+  app.on('before-quit', () => web.shutdown());
+}
+
 function goTab(tab) {
   if (TABS.includes(tab)) settings.ui.tab = tab; // a window made now opens there
   showWindow();

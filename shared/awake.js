@@ -6,6 +6,10 @@
 'use strict';
 
 const HOLD_MS = 60000;
+<<<<<<< HEAD
+=======
+const quiet = () => require('./quiet.js');
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
 let psb; // undefined: not looked up yet; null: none here
 let blocker = null;
@@ -27,6 +31,10 @@ function blockerApi() {
 function release() {
   clearTimeout(timer);
   timer = null;
+<<<<<<< HEAD
+=======
+  quiet().hold('files', false);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   if (blocker === null) return;
   try { psb.stop(blocker); } catch (_) { /* gone */ }
   blocker = null;
@@ -35,6 +43,7 @@ function release() {
 
 function touch() {
   const now = Date.now();
+<<<<<<< HEAD
   if (blocker !== null && now - last < 1000) return;
   last = now;
   const api = blockerApi();
@@ -46,6 +55,17 @@ function touch() {
     } catch (_) {
       return;
     }
+=======
+  if (timer !== null && now - last < 1000) return; // touched this second: held already
+  last = now;
+  quiet().hold('files', true); // the session pings every second while files move (shared/quiet.js)
+  const api = blockerApi();
+  if (api && blocker === null) {
+    try {
+      blocker = api.start('prevent-app-suspension');
+      console.log('[awake] awake for file transfers');
+    } catch (_) { /* the quiet hold below still goes */ }
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   }
   clearTimeout(timer);
   timer = setTimeout(release, HOLD_MS);

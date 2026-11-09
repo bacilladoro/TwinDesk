@@ -15,7 +15,11 @@ const { execFileSync, fork } = require('child_process');
 const P = require('../protocol.js');
 const { FastFiles, receiverHook } = require('../fastfile.js');
 const { Fx2 } = require('../fx2.js');
+<<<<<<< HEAD
 const { plan } = require('../fx2-engine.js');
+=======
+const { Engine, plan, PATH, HEADER } = require('../fx2-engine.js');
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
 const T = P.T;
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fx2-'));
@@ -77,7 +81,14 @@ async function pair(opts = {}) {
   const guest = { rx: receiver('guest') };
   host.fx2 = opts.hostFx2 === false ? null : new Fx2({ tls: { key, cert } });
   guest.fx2 = opts.guestFx2 === false ? null : new Fx2();
+<<<<<<< HEAD
   if (host.fx2) await new Promise((r) => (host.fx2.port ? r() : host.fx2.once('port', r)));
+=======
+  // As the peers do: a session needs the engines (they start on demand).
+  if (host.fx2) host.fx2.need('session', true);
+  if (guest.fx2) guest.fx2.need('session', true);
+  if (host.fx2) assert.ok(await (host.fx2.whenReady(5000) || true), 'the host’s engine listens');
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   const wire = (to) => (m) => setImmediate(() => { if (!to.fx.incoming(m)) to.rx.deliver(m); });
   // welcome's fx2 only when the guest's hello said fx2 and the host has an engine (as server.js does)
   const fx2On = !!(host.fx2 && guest.fx2);
@@ -307,6 +318,96 @@ async function arrived(to, id, p) {
     }
   }
 
+<<<<<<< HEAD
+=======
+  // On demand: nothing runs until something needs it; it stops when nothing does, never during a
+  // session or a job; a new start gets the server, the plain server and the tokens back.
+  {
+    const h = new Fx2({ tls: { key, cert }, idleMs: 50 });
+    assert.strictEqual(h.state, 'stopped', 'not started by itself');
+    h.setTokens([token]);
+    h.setPlain(true);
+    assert.strictEqual(h.state, 'stopped', 'settings alone don’t start it');
+    const w = h.whenReady(5000);
+    assert.ok(w && typeof w.then === 'function', 'a wait while it starts');
+    assert.strictEqual(await w, true, 'it listens, its plain server too');
+    assert.ok(h.port > 0 && h.plainPort > 0);
+    assert.strictEqual(h.whenReady(), null, 'no wait once it listens');
+    await until(() => h.state === 'stopped', 'stops when nothing needs it', 2000);
+    assert.strictEqual(h.port, 0);
+    h.need('session', true);
+    await until(() => h.port > 0 && h.plainPort > 0, 'starts again for a session');
+    await new Promise((r) => setTimeout(r, 200));
+    assert.notStrictEqual(h.state, 'stopped', 'never stops during a session');
+    // The tokens came back with it: a range request with the session's token isn't refused for it.
+    const code = await new Promise((resolve) => {
+      const req = https.request({ host: '127.0.0.1', port: h.port, path: '/twindesk/fx2/x?i=0&off=0&len=1&total=1', method: 'GET', rejectUnauthorized: false, headers: { 'x-twindesk-fx': token } }, (res) => { res.resume(); resolve(res.statusCode); });
+      req.on('error', () => resolve(0));
+      req.end();
+    });
+    assert.strictEqual(code, 404, 'the token works after a restart (404: no such file, not 403)');
+    h.need('session', false);
+    await until(() => h.state === 'stopped', 'stops after the session', 2000);
+    // A job starts it (a guest's put/pull) and keeps it up until it settles.
+    const g = new Fx2({ idleMs: 50 });
+    const pf = file('lazy.bin', 1000);
+    const job = g.put('lz', pf, 1000, { host: '127.0.0.1', port: 1, token, fp });
+    assert.notStrictEqual(g.state, 'stopped', 'a job starts it');
+    await assert.rejects(job, (e) => e.early, 'nothing listens there: early, the fx way');
+    await until(() => g.state === 'stopped', 'stops after the job', 2000);
+    h.close();
+    g.close();
+  }
+
+  // A PUT killed while it waits for 'target' does not wedge the id: its range frees, the file
+  // fails, and a retry of the same id gets a fresh 'want' instead of a stale 409.
+  {
+    const posts = [];
+    const engine = new Engine((m) => posts.push(m));
+    engine.handle({ op: 'listen', tls: { key, cert } });
+    await until(() => engine.port > 0, 'the engine listens');
+    engine.handle({ op: 'tokens', list: [token] });
+    const put = (id) => https.request({
+      host: '127.0.0.1', port: engine.port, method: 'PUT', agent: false, rejectUnauthorized: false,
+      path: `${PATH}${id}?i=0&off=0&len=5000&total=5000`,
+      headers: { [HEADER]: token, 'content-length': 5000 },
+    });
+    const first = put('w');
+    first.on('error', () => {});
+    first.write(crypto.randomBytes(5000));
+    await until(() => posts.some((m) => m.ev === 'want' && m.id === 'w'), 'want posted');
+    first.destroy();
+    await until(() => posts.some((m) => m.ev === 'failed' && m.id === 'w'), 'the file fails');
+    assert.strictEqual(engine.incoming.size, 0, 'nothing left of w');
+    // 'target' arriving late is a no-op now; a retry starts over.
+    const target = path.join(dir, 'w.bin');
+    engine.handle({ op: 'target', id: 'w', path: target });
+    posts.length = 0;
+    const body = crypto.randomBytes(5000);
+    const status = new Promise((resolve) => {
+      const second = put('w');
+      second.on('response', (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+      second.on('error', () => resolve(0));
+      second.end(body);
+    });
+    await until(() => posts.some((m) => m.ev === 'want' && m.id === 'w'), 'want again');
+    engine.handle({ op: 'target', id: 'w', path: target });
+    assert.strictEqual(await status, 200, 'the retried PUT is taken');
+    await until(() => posts.some((m) => m.ev === 'done' && m.id === 'w'), 'w completes');
+    assert.ok(fs.readFileSync(target).equals(body), 'the bytes arrived');
+    // The idle reaper drops a file nobody finishes and a served file nobody GETs.
+    engine.incoming.set('stale', { size: 1, path: 'x', fd: null, hashes: [undefined], left: 1, queue: [], reqs: new Set(), busy: new Set(), got: 0, touched: 0 });
+    engine.handle({ op: 'serve', id: 's1', path: target, size: 5000 });
+    engine.serving.get('s1').touched = 0;
+    posts.length = 0;
+    engine._reap();
+    assert.ok(!engine.incoming.has('stale') && !engine.serving.has('s1'), 'idle entries reaped');
+    assert.strictEqual(posts.filter((m) => m.ev === 'failed').length, 2, 'both reported failed');
+    engine.handle({ op: 'reset' });
+    engine.server.close();
+  }
+
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   // The engine as a process of its own (a utility process in the app; a forked node here).
   {
     const child = fork(path.join(__dirname, '..', 'fx2-engine.js'), [], { stdio: 'ignore' });

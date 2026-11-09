@@ -31,13 +31,28 @@ UI.tab({
     );
     const phoneCard = UI.phoneAudioCard(); // a phone: its sound here over Bluetooth, its media controls
     const micCard = UI.micCard ? UI.micCard() : null; // Microphone, each way (shared/ui-mic.js)
+<<<<<<< HEAD
+=======
+    const cap = UI.audioCaptureCard ? UI.audioCaptureCard({ mute: false }) : null; // engine and mute (shared/ui-web.js)
+    const airplay = UI.airplayPlaying ? UI.airplayPlaying() : null; // music an iPhone plays here (AirPlay)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     body.append(
+      ...(airplay ? [airplay.el] : []),
       pair.el,
+<<<<<<< HEAD
+=======
+      ...(cap ? [cap.el] : []),
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       ...(micCard ? [micCard.el] : []),
       phoneCard.el,
     );
     return (s) => {
+      if (airplay) airplay.update(s);
       phoneCard.update(s);
+<<<<<<< HEAD
+=======
+      if (cap) cap.update(s);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       if (micCard) { micCard.update(s); }
       const a = s.audio;
       const connected = s.link.state === 'connected';

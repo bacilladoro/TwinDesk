@@ -8,7 +8,11 @@
 import Foundation
 
 enum Shake {
+<<<<<<< HEAD
   private static let STROKE = 40.0, REVERSALS = 4, WINDOW = 0.8, GAP = 0.2, COOLDOWN = 1.0
+=======
+  private static let STROKE = 80.0, REVERSALS = 4, WINDOW = 0.8, GAP = 0.2, COOLDOWN = 1.0
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   private static var dir = 0, run = 0.0, last = 0.0, quiet = 0.0
   private static var turns = [Double](repeating: 0, count: REVERSALS), nTurns = 0, head = 0
 

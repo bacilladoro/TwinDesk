@@ -10,7 +10,11 @@ const { normalizeFolder } = require('../shared/received.js');
 // The keys that can be held to move a window to the other computer (the helper grabs with them).
 const MOVE_KEYS = ['ControlRight', 'ControlLeft', 'ShiftRight', 'ShiftLeft', 'AltRight', 'AltLeft', 'MetaRight', 'MetaLeft'];
 
+<<<<<<< HEAD
 const TABS = ['phone', 'overview', 'connection', 'mirror', 'papps', 'calls', 'messages', 'media', 'pfiles', 'mac-pc', 'pc-mac', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'remote', 'apps', 'rezume', 'multi', 'general', 'about'];
+=======
+const TABS = ['phone', 'overview', 'connection', 'mirror', 'papps', 'calls', 'messages', 'media', 'pfiles', 'mac-pc', 'pc-mac', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'remote', 'apps', 'rezume', 'multi', 'web', 'airplay', 'general', 'about'];
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 
 const OLD_TABS = { display: 'mac-pc', receive: 'mac-pc', share: 'pc-mac' }; // older names
 
@@ -34,9 +38,8 @@ const num = (v, d, min, max) => (Number.isFinite(Number(v)) && v !== null && v !
 
 function normalize(s) {
   s = s || {};
-  // Every feature is off on a fresh install until it's turned on; settings saved before keep theirs
-  // (and a feature added since is on for them, as it was before it had a switch).
-  const was = Object.keys(s).length > 0;
+  // Every feature is off until it's turned on: a setting a file doesn't hold is off, whatever wrote
+  // the file (an old version, the mesh, a half-written one).
   const kvm = s.kvm || {};
   const keys = s.keys || {};
   const c = s.clipboard || {};
@@ -60,8 +63,8 @@ function normalize(s) {
   return {
     rev: 9, // settings revision (upgrades in normalize, like the Mac's store.js)
     kvm: {
-      mouse: bool(kvm.mouse, was),
-      keyboard: bool(kvm.keyboard, was),
+      mouse: bool(kvm.mouse, false),
+      keyboard: bool(kvm.keyboard, false),
       driveOther: bool(kvm.driveOther, true),
       beDriven: bool(kvm.beDriven, true),
       resistancePx: Math.round(num(kvm.resistancePx, P.RESISTANCE_PX, 0, 400)),
@@ -74,7 +77,11 @@ function normalize(s) {
       linkedBy: kvm.linkedBy && typeof kvm.linkedBy === 'object'
         ? Object.fromEntries(Object.entries(kvm.linkedBy).filter(([, v]) => typeof v === 'boolean').slice(0, 50)) : {},
       gestures: bool(kvm.gestures, true), // Trackpad gestures work on the other computer (pair.sync 'gestures')
+<<<<<<< HEAD
       shakeHome: bool(kvm.shakeHome, true), // shake this computer's mouse while driving: the pointer comes home (the helper's shake)
+=======
+      shakeHome: bool(kvm.shakeHome, false), // shake this computer's mouse while driving: the pointer comes home (the helper's shake)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       syncPads: bool(kvm.syncPads, false), // every mouse and trackpad moves the one pointer; off: this PC's own takes it back (pair.sync 'syncPads')
       hotkeySwitch: bool(kvm.hotkeySwitch, false), // keyboard only (Cursor off): double-tap moves the keyboard over and back
       ble: bool(kvm.ble, true), // cursor sharing while the session runs through Bluetooth (pair.sync 'ble')
@@ -82,11 +89,15 @@ function normalize(s) {
     // hotkey: double-tap = mouse and keyboard home. lockKeys: cursor lock on/off (shared/cursorlock.js)
     keys: { swapCtrlCmd: bool(keys.swapCtrlCmd, true), hotkey: P.HOTKEYS.includes(keys.hotkey) ? keys.hotkey : P.HOTKEY_WIN, lockKeys: CL.validKeys(keys.lockKeys, CL.DEFAULT_KEYS.linux) },
     // hud: popup when switching computers. inputProtocol: udp = tdv2 input lane (default), tcp = tdv1
+<<<<<<< HEAD
     app: { hud: bool(appS.hud, true), inputProtocol: appS.inputProtocol === 'tcp' ? 'tcp' : 'udp' },
+=======
+    app: { hud: bool(appS.hud, true), inputProtocol: appS.inputProtocol === 'tcp' ? 'tcp' : 'udp', keepPinging: appS.keepPinging === true }, // keepPinging: General › Advanced (shared/quiet.js)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     // New releases on GitHub (shared/updates.js); notified = the last version announced, skipped = version ignored
     updates: { auto: bool(up.auto, true), notified: typeof up.notified === 'string' ? up.notified.slice(0, 40) : '', skipped: typeof up.skipped === 'string' ? up.skipped.slice(0, 40) : '' },
     clipboard: {
-      enabled: bool(c.enabled, was),
+      enabled: bool(c.enabled, false),
       send: bool(c.send, true),
       receive: bool(c.receive, true),
       // Pictures too, up to 10 MB (shared/clipimage.js), screenshots put on the clipboard among them
@@ -101,13 +112,23 @@ function normalize(s) {
       volume: Math.round(num(mon.volume, 1, 0, 1) * 100) / 100,
       mute: bool(mon.mute, false),
       // Playback of shared screens, both directions, the same on both computers (pair.sync
-      // 'pace'): 'fast' (default, shown the moment it is decoded) | 'smooth' (about a frame of buffer)
-      pacing: mon.pacing === 'smooth' && (s.rev || 0) >= 8 ? 'smooth' : 'fast', // rev 8: back to Fastest once
+      // 'pace'): 'fast' (default, shown the moment it is decoded) | 'smooth' (about a frame of buffer) |
+      // 'steady' (no zero playout delay on the stream: WebRTC paces it itself, as a web browser plays it)
+      pacing: ['smooth', 'steady'].includes(mon.pacing) && (s.rev || 0) >= 8 ? mon.pacing : 'fast', // rev 8: back to Fastest once
       framegen: bool(mon.framegen, false), // in-between frames on the GPU (shared/framegen.js), off by default
     },
     // Remote tab (shared/phone-remote.js): the phone's Remote page moves the pointer and types here
     // Real gamepad (pad): its sticks and buttons as a controller here, off until turned on
-    remote: { allow: bool((s.remote || {}).allow, was), pad: bool((s.remote || {}).pad, false) },
+    remote: { allow: bool((s.remote || {}).allow, false), pad: bool((s.remote || {}).pad, false) },
+    // TwinDesk Web (shared/web/webwire.js): off until turned on; what new web devices may do.
+    web: (() => {
+      const w = s.web || {};
+      const port = Number(w.port);
+      return { on: bool(w.on, false), port: Number.isInteger(port) && port >= 1024 && port < 65000 ? port : 47870,
+        screen: bool(w.screen, true), control: bool(w.control, true), camera: bool(w.camera, true), mic: bool(w.mic, true), pad: bool(w.pad, false),
+        airplay: bool(w.airplay, false), // Receive AirPlay (shared/airplay), off until turned on
+        airplayMusic: bool(w.airplayMusic, true), airplaySound: bool(w.airplaySound, true), airplayFull: bool(w.airplayFull, false) }; // its switches
+    })(),
     // ReZume tab (shared/rezume.js): off until turned on; what goes, which ways, where it shows
     rezume: require('../shared/rezume.js').normalize(s.rezume),
     // Camera tab (shared/camshare.js): this computer's camera to the other one, off until turned
@@ -124,13 +145,13 @@ function normalize(s) {
       device: typeof (s.camera || {}).device === 'string' ? s.camera.device.slice(0, 200) : '',
     },
     audio: {
-      receive: bool(audio.receive, was), // play the Mac's sound here (audio.policy W→M)
+      receive: bool(audio.receive, false), // play the Mac's sound here (audio.policy W→M)
       volume: Math.round(num(audio.volume, 1, 0, 1) * 100) / 100,
       send: bool(audio.send, false), // send this PC's sound to the Mac (dir w2m)
       muteLocal: bool(audio.muteLocal, false), // silence this PC while sending
       // A phone: its media controls on Overview (shared/nowplaying.js), and its sound here over
       // Bluetooth, this computer as its speaker (shared/btaudio.js), off until turned on
-      phoneMedia: bool(audio.phoneMedia, was),
+      phoneMedia: bool(audio.phoneMedia, false),
       phoneBt: bool(audio.phoneBt, false),
       // Microphone (shared/mic.js): this computer's to the other (micSend), the other's here (micReceive),
       // off until turned on; micDevice: the microphone sent, micOut: where the other's plays ('' = found)
@@ -146,14 +167,14 @@ function normalize(s) {
       installedKey: typeof term.installedKey === 'string' ? term.installedKey : '', // digest of the Mac key line we installed
     },
     files: {
-      dropToMac: bool(files.dropToMac, was),
+      dropToMac: bool(files.dropToMac, false),
       shareOn: bool(files.shareOn, false), // set only by a successful share setup (smb.js)
       shareFolder: typeof files.shareFolder === 'string' ? files.shareFolder : '',
-      mountMac: bool(files.mountMac, was),
-      acceptFromMac: bool(files.acceptFromMac, was), // files dragged from the Mac across the edge
-      edgeDrag: bool(files.edgeDrag, was), // drag files/folders across the screen edge, both ways (drag.policy)
+      mountMac: bool(files.mountMac, false),
+      acceptFromMac: bool(files.acceptFromMac, false), // files dragged from the Mac across the edge
+      edgeDrag: bool(files.edgeDrag, false), // drag files/folders across the screen edge, both ways (drag.policy)
       // Copy and paste files with two global shortcuts (fclip.js)
-      shortcuts: bool(files.shortcuts, was),
+      shortcuts: bool(files.shortcuts, false),
       copyKeys: accel(files.copyKeys, 'Control+Alt+C'),
       pasteKeys: accel(files.pasteKeys, 'Control+Alt+V'),
       plain: bool(files.plain, false), // Encrypt file transfers off: plain HTTP for file bytes where both allow it (shared/fastfile.js fxPlain)
@@ -161,14 +182,15 @@ function normalize(s) {
     },
     notifs: { // (notifs.js): muted = apps never sent
       send: bool(nf.send, false),
-      receive: bool(nf.receive, was),
+      receive: bool(nf.receive, false),
       hideText: bool(nf.hideText, false),
       muted: Array.isArray(nf.muted) ? nf.muted.filter((x) => typeof x === 'string').map((x) => x.slice(0, 300)).slice(0, 500) : [],
     },
     pcScreen: { // Display › PC → Mac; Off/Mirror/Extend itself is never saved
       monitor: typeof pcs.monitor === 'string' ? pcs.monitor : '', // Electron display id for Mirror ('' = main)
-      mbps: [10, 20, 30, 50].includes(pcs.mbps) ? pcs.mbps : 30, // same presets as the Mac
-      maxHeight: [0, 1080, 1440].includes(pcs.maxHeight) ? pcs.maxHeight : 1080, // stream size (0 = full pixels)
+      mbps: [10, 20, 30, 50, 80].includes(pcs.mbps) ? pcs.mbps : 30, // same presets as the Mac
+      maxHeight: [0, 1080, 1440, 2160].includes(pcs.maxHeight) ? pcs.maxHeight : 1080, // stream size (0 = full pixels)
+      fps: [0, 30, 60].includes(pcs.fps) ? pcs.fps : 0, // frame rate cap (0 = the display's refresh rate)
       extendSize: ['mac', '1920x1080', '2560x1440', '3840x2160'].includes(pcs.extendSize) ? pcs.extendSize : 'mac', // the virtual monitor
       sound: bool(pcs.sound, false), // the screen's sound in the same session
       input: bool(pcs.input, true), // the Mac's mouse and keyboard drive this PC
@@ -179,7 +201,11 @@ function normalize(s) {
     wake: { peers: wakePeers(wk.peers) }, // {deviceId: {name, os, macs, address, at}} from wol.info
     // moveWindows: the move key held, a window clicked and dragged past the shared edge goes to the
     // other computer (shared/movewin.js), off until switched on; moveKey: which key.
+<<<<<<< HEAD
     pcApps: { allow: bool(pca.allow, was), moveWindows: bool(pca.moveWindows, false), moveKey: MOVE_KEYS.includes(pca.moveKey) ? pca.moveKey : 'ControlRight' },
+=======
+    pcApps: { allow: bool(pca.allow, false), moveWindows: bool(pca.moveWindows, false), moveKey: MOVE_KEYS.includes(pca.moveKey) ? pca.moveKey : 'ControlRight' },
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     // A phone as the peer: its screen window, apps and setup
     phone: {
       sound: bool(ph.sound, false),
@@ -195,11 +221,12 @@ function normalize(s) {
       // Keys in a phone window and on the phone (shared/phonechat.js): Enter sends in WhatsApp,
       // Instagram and Telegram (Shift+Enter a new line); the arrow keys swipe the screen.
       enterSends: bool(ph.enterSends, true),
+      uhid: bool(ph.uhid, false), // Type as a hardware keyboard (shared/uhidkbd.js)
       arrowSwipe: bool(ph.arrowSwipe, false),
     },
     // Bluetooth for devices not on this network (blepipe.js, netlink.js): with phones (ble), with computers (blePc);
     // bleWifiOff: none at all while the session is on the same Wi-Fi (blepolicy.js wifiQuiet)
-    net: { ble: bool(nt.ble, true), blePc: bool(nt.blePc, false), bleWifiOff: bool(nt.bleWifiOff, true), hotspots: hotspots(nt.hotspots), keepWifi: bool(nt.keepWifi, true) },
+    net: { ble: bool(nt.ble, true), blePc: bool(nt.blePc, false), bleWifiOff: bool(nt.bleWifiOff, true), hotspots: hotspots(nt.hotspots), keepWifi: bool(nt.keepWifi, true), tailscale: bool(nt.tailscale, true), bleInput: bool(nt.bleInput, false) }, // tailscale: shared/tailnet.js; bleInput: shared/bleinput.js
     mount: { on: bool(mt.on, false) }, // the phone as a drive (phonedrive.js), only when Mount is clicked
     // Calls, Messages, Photos and Files from a phone (shared/phonehub.js), each off until switched on.
     // callAudio: the calls' sound here over Bluetooth; btDevices: which paired Bluetooth device each
@@ -210,14 +237,18 @@ function normalize(s) {
       // Shared folders (shared/foldershare.js), both ways, off until switched on.
       shareMount: bool(hub.shareMount, false), shareServe: bool(hub.shareServe, false), shareFolder: typeof hub.shareFolder === 'string' ? hub.shareFolder.slice(0, 1000) : '',
     },
-    macApps: { on: bool(mca.on, was) }, // The other computer's apps open here (pair.sync 'apps' in) // The Mac may open this PC's apps (it shows them only if it accepts)
+    macApps: { on: bool(mca.on, false) }, // The other computer's apps open here (pair.sync 'apps' in) // The Mac may open this PC's apps (it shows them only if it accepts)
     // Setup screen: shown once. done: everything was ready, or 'Skip for now' was pressed; after that
     // General and Display show what's missing (a firewall that changes with the network, a helper
     // that restarts, a phone connecting don't bring the screen back).
     setup: { skipped: Array.isArray(setup.skipped) ? setup.skipped.filter((x) => typeof x === 'string').slice(0, 10) : [], done: bool(setup.done, Array.isArray(setup.skipped) && setup.skipped.length > 0) },
     // overview: what Overview shows (General › Overview); chats: Messages' chat apps; language: the UI's ('' = the system's).
     ui: { tab: OLD_TABS[ui.tab] || (TABS.includes(ui.tab) ? ui.tab : 'overview'), overview: overviewParts(ui.overview), chats: bool(ui.chats, false), language: savedLanguage(ui.language),
+<<<<<<< HEAD
       theme: Look.theme(ui.theme), accent: Look.accent(ui.accent) }, // General › Appearance (shared/look.js)
+=======
+      style: Look.style(ui.style), theme: Look.theme(ui.theme), accent: Look.accent(ui.accent) }, // General › Appearance (shared/look.js)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     windows: s.windows && typeof s.windows === 'object' ? s.windows : {},
   };
 }
@@ -237,7 +268,7 @@ function pairSync(v) {
     for (const [f, d] of Object.entries(feats).slice(0, 10)) {
       if (f === 'values') {
         out[id].values = {};
-        if (d && ['fast', 'smooth'].includes(d.pace)) out[id].values.pace = d.pace;
+        if (d && ['fast', 'smooth', 'steady'].includes(d.pace)) out[id].values.pace = d.pace;
         if (d && typeof d.gestures === 'boolean') out[id].values.gestures = d.gestures;
         if (d && typeof d.keyboard === 'boolean') out[id].values.keyboard = d.keyboard; // with a phone
         if (d && typeof d.reverseScroll === 'boolean') out[id].values.reverseScroll = d.reverseScroll;

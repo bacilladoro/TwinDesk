@@ -26,13 +26,16 @@ const FEATURES = {
   cursor: { out: ['kvm', 'driveOther'], in: ['kvm', 'beDriven'] },
   rezume: { out: ['rezume', 'send'], in: ['rezume', 'receive'] },
   remote: { in: ['remote', 'allow'] },
+  mic: { in: ['audio', 'micReceive'] }, // a phone's microphone here (its Audio page's switch; a computer's own is its mic card's)
   terminal: { out: ['terminal', 'allowMac'], in: ['terminal', 'enabled'] },
   files: { out: ['files', 'dropToMac'], in: ['files', 'acceptFromMac'] },
 };
 // Shared values, the same on both computers (no direction): key → settings path + values.
 const VALUES = {
   rezume: { path: ['rezume', 'on'], allowed: [true, false], feature: 'rezume' }, // only where the app has ReZume
-  pace: { path: ['monitor', 'pacing'], allowed: ['fast', 'smooth'] },
+  pace: { path: ['monitor', 'pacing'], allowed: ['fast', 'smooth', 'steady'] },
+  // Share screen › Resolution, the same as a phone's Receive screen page (only with a phone).
+  res: { path: ['pcScreen', 'maxHeight'], allowed: [0, 1080, 1440, 2160], phone: true },
   gestures: { path: ['kvm', 'gestures'], allowed: [true, false] },
   syncPads: { path: ['kvm', 'syncPads'], allowed: [true, false] }, // one pointer for every mouse (kvm.js 'local')
   ble: { path: ['kvm', 'ble'], allowed: [true, false] }, // cursor sharing over Bluetooth (kvm.js)
@@ -100,7 +103,7 @@ class PairSync {
 
   // The shared values with this peer: the phone-only ones only with a phone.
   _values() {
-    const phone = this.link.peerOs === P.OS.ANDROID;
+    const phone = P.isPhoneOs(this.link.peerOs);
     return Object.fromEntries(Object.entries(VALUES).filter(([, d]) => (phone || !d.phone) && (!d.feature || this.features[d.feature])));
   }
 

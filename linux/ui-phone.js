@@ -91,11 +91,20 @@ UI.tab({
     const wall = UI.switch((v) => api.setPhone({ wallpaper: v }), { label: I18n.t('Wallpaper') });
     const enterSends = UI.switch((v) => api.setPhone({ enterSends: v }), { label: I18n.t('Enter sends messages') });
     const arrowSwipe = UI.switch((v) => api.setPhone({ arrowSwipe: v }), { label: I18n.t('Arrow keys swipe') });
+<<<<<<< HEAD
+=======
+    // #123: keys as a real USB keyboard on the phone (shared/uhidkbd.js), in the phone's own layout.
+    const uhid = UI.switch((v) => api.setPhone({ uhid: v }), { label: I18n.t('Type as a hardware keyboard') });
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     const optsCard = UI.card(I18n.t('Settings'), [
       UI.row(I18n.t('Phone sound in the screen window'), I18n.t('Android 11 or later'), [sound]),
       UI.row(I18n.t('Picture'), I18n.t('For the screen window and app windows'), [quality]),
       UI.row(I18n.t('Enter sends messages'), I18n.t('In WhatsApp, Instagram and Telegram, in a phone window or with this keyboard on the phone. Shift+Enter: a new line'), [enterSends]),
       UI.row(I18n.t('Arrow keys swipe'), I18n.t('In a phone window: up and down through feeds, Reels and Shorts, left and right through pages. Off: they move the cursor'), [arrowSwipe]),
+<<<<<<< HEAD
+=======
+      UI.row(I18n.t('Type as a hardware keyboard'), I18n.t('Keys reach the phone as from a USB keyboard, in the layout set on the phone (Settings › System › Keyboard › Physical keyboard), so every symbol and accented letter comes out as it does there. Needs wireless debugging. Off: keys go as Android key codes in the US layout'), [uhid]),
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       UI.row(I18n.t('Show the phone’s wallpaper here'), I18n.t('Lets TwinDesk on the phone read it (set up over wireless debugging)'), [wall]),
       UI.row(I18n.t('Mouse and keyboard'), I18n.t('Push the pointer off the edge of the screen to use the phone. Double-tap the hotkey to come back.'), [UI.button(I18n.t('Cursor Settings'), () => UI.go('cursor'), 'small')]),
     ]);
@@ -122,17 +131,25 @@ UI.tab({
       const info = ph.info || {};
       const br = ph.bridge || { state: 'off' };
       for (const x of [hero, viaCard, adbCard, appsCard, winCard, optsCard]) x.hidden = !c;
+<<<<<<< HEAD
+=======
+      // An iPhone: its card (name, battery, Disconnect) only; no adb, screen, apps or input from iOS.
+      const ios = !!(c && c.os === 'ios');
+      if (ios) for (const x of [viaCard, adbCard, appsCard, winCard, optsCard, rezume.el, wifiBtn, hotspotBtn]) x.hidden = true;
+      if (ios) showBtn.disabled = false; // it asks the phone to share (Share Screen there)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       notConnected.set(c ? '' : ph.nearby && ph.nearby.length ? I18n.t('Click the phone above Overview to connect it.') : I18n.t('No phone connected. Open TwinDesk on the phone and pair it from Overview › Nearby.'));
       if (!c) return;
 
       h1.textContent = c.name;
-      desc.textContent = [info.maker && info.model ? `${info.maker} ${info.model}` : info.model, info.release && `Android ${info.release}`].filter(Boolean).join(' · ');
+      desc.textContent = [info.maker && info.model ? `${info.maker} ${info.model}` : info.model, info.release && `${ios ? (info.platform === 'ipados' ? 'iPadOS' : 'iOS') : 'Android'} ${info.release}`].filter(Boolean).join(' · ');
       name.textContent = c.name;
       sub.textContent = [c.usb ? I18n.t('USB cable') : '', c.rttMs != null ? `${c.rttMs} ms` : I18n.t('Connected'), info.battery != null ? I18n.t(info.charging ? 'Battery {percent}%, charging' : 'Battery {percent}%', { percent: info.battery }) : ''].filter(Boolean).join(' · ');
       if (UI.phoneWall) dev.style.setProperty('--phone-wall', UI.phoneWall);
       else if (info.colors && info.colors.length) dev.style.setProperty('--phone-wall', `linear-gradient(160deg, ${info.colors.join(', ')}${info.colors.length === 1 ? `, ${info.colors[0]}` : ''})`);
       else dev.style.removeProperty('--phone-wall');
 
+      if (ios) return;
       const ready = br.state === 'ready';
       showBtn.disabled = !ready;
       const n = s.net || {};
@@ -168,6 +185,7 @@ UI.tab({
       quality.set(String(settings.bitrateMbps || 8));
       wall.set(settings.wallpaper !== false);
       enterSends.set(settings.enterSends !== false);
+      uhid.set(settings.uhid === true);
       arrowSwipe.set(settings.arrowSwipe === true);
       via.set(br.input || (settings.input === 'phone' ? 'phone' : 'adb'));
       viaRow.setHint(br.inputMode === 'auto' ? (br.state === 'ready' ? I18n.t('Automatic: ADB, wireless debugging is ready') : I18n.t('Automatic: Accessibility until wireless debugging is ready'))

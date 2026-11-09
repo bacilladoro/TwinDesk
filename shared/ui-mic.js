@@ -23,7 +23,12 @@
     function update(s) {
       const a = s.audio || {};
       const m = a.mic || {};
+<<<<<<< HEAD
       const phone = !!(UI.isPhone && UI.isPhone(s));
+=======
+      const kind = UI.deviceKind(s); // shared/ui-kinds.js: each kind of device says it its own way below
+      const phone = kind !== 'computer';
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       sendSw.set(!!a.micSend);
       recvSw.set(!!a.micReceive);
       sendRow.hidden = phone; // a phone takes no microphone from here
@@ -38,7 +43,19 @@
         : m.error && /microphone/i.test(m.error) && !m.sending ? m.error
           : !m.peerAccepts ? t('Turned off on {device}', { device })
             : m.sending ? t('In use on {device}', { device }) : t('Connecting…'));
+<<<<<<< HEAD
       if (phone) {
+=======
+      if (kind === 'ios') { // its app captures it (phone.mic.want)
+        const im = ((s.phone || {}).bridge || {}).iosMic || {};
+        const where = m.linux ? t('Apps here pick “TwinDesk Microphone”') : t('Plays into a virtual audio cable (VB-CABLE, BlackHole) when one is installed, else the speakers');
+        recvRow.setHint(!a.micReceive ? where
+          : im.error ? im.error
+            : im.on ? t('Live: {where}', { where }) : t('Open TwinDesk on {device} to start its microphone', { device }));
+        return;
+      }
+      if (kind === 'android') { // through wireless debugging
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         const ready = ((s.phone || {}).bridge || {}).state === 'ready';
         recvRow.setHint(!ready ? t('Needs wireless debugging (Phone page) and Android 11 or later')
           : m.linux ? t('Apps here pick “TwinDesk Microphone”. Android 11 or later')

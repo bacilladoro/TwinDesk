@@ -5,7 +5,7 @@
 'use strict';
 
 UI.tab({
-  id: 'connection', // was Overview: the device's own Overview is shared/ui-device.js
+  id: 'connection', // was Overview: the device's own Overview is shared/ui-device-*.js
   order: 1,
   title: window.I18n.t('Connection'),
   heading: window.I18n.t('Connection'),
@@ -157,6 +157,7 @@ UI.tab({
     let devicesKey = '';
 
     const pairedList = el('div');
+    const webCard = UI.webConnCard ? UI.webConnCard() : null; // TwinDesk Web's paired devices (shared/ui-web.js)
     body.append(
       UI.card('', [addrRow, ipRow]),
       UI.card(t('Found nearby'), [discRow, foundList, ...bleRows], { actions: [refresh] }),
@@ -164,6 +165,10 @@ UI.tab({
       adbCard,
       pair.el,
       UI.card(t('Paired'), [pairedList]),
+<<<<<<< HEAD
+=======
+      ...(webCard ? [webCard.el] : []),
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     );
 
     let last = null;
@@ -171,6 +176,7 @@ UI.tab({
     let pairedKey = '';
     const render = () => last && update(last);
     const update = (s) => {
+      if (webCard) webCard.render(s);
       last = s;
       bleSw.set(!s.net || s.net.ble !== false);
       blePcSw.set(!!s.net && s.net.blePc === true);
@@ -288,7 +294,11 @@ UI.tab({
           const online = up.has(dev.id);
           // A Mac hosts; with a PC or another Linux computer the one who clicks is the guest (L4).
           // A phone is asked to pair. Another computer can be paired while others are connected.
+<<<<<<< HEAD
           const btn = online || isKnown ? null : UI.button(dev.os === 'mac' || dev.os === 'android' ? t('Pair') : t('Connect'), () => api.pair(dev.id), 'small' + (dev.invited ? ' primary' : ''));
+=======
+          const btn = online || isKnown ? null : UI.button(dev.os === 'mac' || dev.os === 'android' || dev.os === 'ios' ? t('Pair') : t('Connect'), () => api.pair(dev.id), 'small' + (dev.invited ? ' primary' : ''));
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
           if (btn) btn.disabled = busy;
           // Paired: Take over (the computer we're a guest of: a takeover hello; one that connects to us:
           // invited, and its hello takes the session from whoever has it).

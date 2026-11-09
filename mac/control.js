@@ -212,14 +212,16 @@ const UI = {
     }
     os = os || 'win';
     const same = os === 'mac';
-    const kind = os === 'linux' ? 'Linux' : same ? 'Mac' : os === 'android' ? I18n.t('Phone') : 'PC';
+    const phoneOs = os === 'android' || os === 'ios';
+    const pad = os === 'ios' && !!(s && s.phone && s.phone.info && s.phone.info.platform === 'ipados');
+    const kind = os === 'linux' ? 'Linux' : same ? 'Mac' : os === 'ios' ? (pad ? 'iPad' : 'iPhone') : phoneOs ? I18n.t('Phone') : 'PC';
     // Computers are called by their names everywhere — this one by its own name, the
     // other by its name (or "the other computer" before anything was paired).
     const me = (s && s.macName) || I18n.t('This Mac');
     name = name || I18n.t('the other computer');
     const Name = name.charAt(0).toUpperCase() + name.slice(1);
     return {
-      os, same, kind, me, name, Name, phone: os === 'android',
+      os, same, kind, me, name, Name, phone: phoneOs, iphone: os === 'ios',
       there: name, here: me, meName: me, // older templates
       out: `${me} → ${name}`,
       in: `${name} → ${me}`,
@@ -233,13 +235,32 @@ const UI = {
     const seg = UI.segmented([
       { value: 'fast', label: I18n.t('Fastest') },
       { value: 'smooth', label: I18n.t('Smooth') },
+      { value: 'steady', label: I18n.t('Steady') },
     ], (v) => UI.api.setSharingOpts({ pace: v }));
     const row = UI.row(I18n.t('Playback'), '', [seg]);
     row.render = (s) => {
       const pace = (s.sharing && s.sharing.pace) || 'fast';
       seg.set(pace);
-      row.setHint(pace === 'smooth' ? I18n.t('Even motion, about one frame later. The same on {name}')
-        : I18n.t('Each frame the moment it arrives. The same on {name}'));
+      row.setHint(pace === 'steady' ? I18n.t('The steadiest motion, paced as a web browser plays it, a few frames later. The same on {name}')
+        : pace === 'smooth' ? I18n.t('Even motion, about one frame later. The same on {name}')
+          : I18n.t('Each frame the moment it arrives. The same on {name}'));
+    };
+    return row;
+  },
+
+  // The encoder this computer shares its screen with (shared/screencodec.js): set(v) saves it, for the
+  // next share. Returns the row with .render(value).
+  codecRow(set) {
+    const sel = UI.select([
+      { value: 'h264', label: 'H.264' },
+      { value: 'h265', label: 'H.265' },
+    ], (v) => set(v));
+    const row = UI.row(I18n.t('Codec'), '', [sel]);
+    row.render = (v) => {
+      v = v === 'h265' ? v : 'h264';
+      sel.set(v);
+      row.setHint(v === 'h265' ? I18n.t('H.265 only: {name} must decode it too, else nothing shows. From the next share')
+          : I18n.t('Works with every computer and phone'));
     };
     return row;
   },
@@ -303,10 +324,16 @@ const UI = {
     return p;
   },
 
-  isPhone: (s) => !!(s && s.client && s.client.os === 'android'),
+  isPhone: (s) => !!(s && s.client && (s.client.os === 'android' || s.client.os === 'ios')),
+  // An iPhone or iPad as the peer: no adb, no screen, input or apps from it (iOS lets no app give them).
+  isIphone: (s) => !!(s && s.client && s.client.os === 'ios'),
 
   // A small device glyph for lists: 'mac' | 'win' | 'linux' | 'android'.
+<<<<<<< HEAD
   osClass: (os) => (os === 'mac' ? 'mac' : os === 'android' ? 'phone' : 'pc'),
+=======
+  osClass: (os) => (os === 'mac' ? 'mac' : os === 'android' || os === 'ios' ? 'phone' : 'pc'),
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   // An app's icon in a grid: its own, else (none, or it doesn't load) TwinDesk's, light or dark as the appearance.
   appIcon(src) {
     const fallback = matchMedia('(prefers-color-scheme: dark)').matches ? 'assets/sidebar-icon@2x.png' : 'assets/sidebar-icon-light@2x.png';
@@ -315,7 +342,7 @@ const UI = {
     return img;
   },
   osIcon(os) {
-    return UI.el('span', { class: `os-ico ${UI.osClass(os)}`, attrs: { 'aria-label': os === 'mac' ? 'Mac' : os === 'linux' ? 'Linux' : os === 'android' ? 'Phone' : 'PC' } });
+    return UI.el('span', { class: `os-ico ${UI.osClass(os)}`, attrs: { 'aria-label': os === 'mac' ? 'Mac' : os === 'linux' ? 'Linux' : os === 'ios' ? 'iPhone' : os === 'android' ? 'Phone' : 'PC' } });
   },
 
   // Two equal direction cards side by side (stacked when narrow), always Mac → PC first.

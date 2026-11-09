@@ -2,7 +2,7 @@
 // Connection page (was Overview): this PC's address and Connect by address, pairing a phone with a
 // QR code, the computers and phones found nearby, the link itself (connect, take over, Wi-Fi
 // Direct, a phone's hotspot), the phone's wireless debugging and what is paired. The start page
-// until something is connected; then Overview (shared/ui-device.js) shows the device.
+// until something is connected; then Overview (shared/ui-device-*.js) shows the device.
 'use strict';
 
 UI.tab({
@@ -29,6 +29,8 @@ UI.tab({
     const againBtn = UI.button(t('Connect'), () => api.connectAgain(), 'small primary');
     const sessionBtns = el('div', { class: 'hero-actions' }, [againBtn, discBtn]);
     const netCancel = UI.button(t('Cancel'), () => api.netCancel(), 'small');
+    const bandNote = UI.note('info', ''); // a phone on this computer's Wi-Fi Direct: its own hotspot is faster (#143)
+    bandNote.hidden = true;
     netCancel.hidden = true;
     const netLocation = UI.button(t('Location settings'), () => api.netLocation(), 'small'); // joining needed Windows' Location
     netLocation.hidden = true;
@@ -57,6 +59,7 @@ UI.tab({
       sessionBtns,
       hsForm,
       netCancel,
+      bandNote,
       netLocation,
       el('div', { class: 'hero-actions' }, [wifiBtn, hotspotBtn]),
     ]);
@@ -96,13 +99,17 @@ UI.tab({
     const qrPair = UI.qrPairCard ? UI.qrPairCard() : null;
 
     const pairedList = el('div');
+    const webCard = UI.webConnCard ? UI.webConnCard() : null; // TwinDesk Web's paired devices (shared/ui-web.js)
+    const airplay = UI.airplayPlaying ? UI.airplayPlaying() : null; // music an iPhone plays here (AirPlay)
     body.append(
+      ...(airplay ? [airplay.el] : []),
       UI.card('', [addrRow, ipRow]),
       UI.card(t('Found nearby'), [discRow, foundList, ...bleRows], { actions: [refresh] }),
       ...(qrPair ? [qrPair.el] : []),
       hero,
       adb.el,
       UI.card(t('Paired'), [pairedList]),
+      ...(webCard ? [webCard.el] : []),
     );
 
     let last = null;
@@ -159,6 +166,8 @@ UI.tab({
       return { busy: true, text: mine.kind === 'take' ? t('Taking over…') : t('Connecting…') };
     }
     const update = (s) => {
+      if (webCard) webCard.render(s);
+      if (airplay) airplay.update(s);
       last = s;
       bleSw.set(!s.net || s.net.ble !== false);
       blePcSw.set(!!s.net && s.net.blePc === true);
@@ -211,6 +220,7 @@ UI.tab({
       wifiBtn.textContent = wifiOn ? t('Back to Bluetooth') : t('Connect with Wi-Fi Direct');
       wifiBtn.hidden = !connected || !netCancel.hidden || !(wifiOn || ble);
       hotspotBtn.hidden = !connected || !netCancel.hidden || wifiOn || !ble || !UI.isPhone(s);
+      bandNote.set(connected && n.state === 'hosting' && n.onGroup && UI.isPhone(s) ? t('Files are often several times faster through the phone’s own 5 GHz hotspot than through this computer’s Wi-Fi Direct, which often runs on a narrower channel. Back to Bluetooth, then Connect with hotspot.') : '');
 
 
       adb.update(s);
@@ -241,11 +251,11 @@ UI.tab({
         const rows = s.found.map((dev) => {
           const isKnown = known.has(dev.id);
           const online = dev.id === live;
-          const st = dev.os === 'android' ? null : rowState(s, dev, online); // a phone has its own card
+          const st = dev.os === 'android' || dev.os === 'ios' ? null : rowState(s, dev, online); // a phone has its own card
           const pairIt = () => go(dev, 'pair', () => api.pair(dev.id));
           // A Mac hosts; with a PC or Linux the one who clicks is the guest. A phone is asked to pair.
           const btn = online || isKnown || (st && !st.fail) ? null
-            : UI.button(st ? t('Retry') : dev.os === 'mac' || dev.os === 'android' ? t('Pair') : t('Connect'), pairIt, 'small' + (dev.invited || st ? ' primary' : ''));
+            : UI.button(st ? t('Retry') : dev.os === 'mac' || dev.os === 'android' || dev.os === 'ios' ? t('Pair') : t('Connect'), pairIt, 'small' + (dev.invited || st ? ' primary' : ''));
           if (btn) btn.disabled = (busy && !st) || connected;
           // Paired: Take over (the computer we're a guest of: a takeover hello; one that connects to us:
           // invited, and its hello takes the session from whoever has it).

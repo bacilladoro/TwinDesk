@@ -46,6 +46,12 @@ class WebHost(ctx: Context, page: String, private val core: Core, private val on
     }
 
     private inner class Bridge {
+        // The pages' text in the app's language (I18n.kt); vars: a JSON object for its {name} parts.
+        @JavascriptInterface fun tr(text: String, vars: String): String {
+            val o = runCatching { JSONObject(vars) }.getOrNull() ?: JSONObject()
+            return com.twindesk.android.tr(text, *o.keys().asSequence().map { it to o.opt(it) }.toList().toTypedArray())
+        }
+
         @JavascriptInterface fun send(json: String) {
             runCatching { core.send(JSONObject(json)) }
         }
@@ -72,6 +78,8 @@ class WebHost(ctx: Context, page: String, private val core: Core, private val on
         @JavascriptInterface fun setPad(id: String, code: String) = main.post {
             if (Remote.CONTROLS.any { it.first == id } && Remote.KEYS.any { it.first == code }) core.remote.setPad(id, code)
         }.let { }
+        // The gamepad's layout (Edit): where each control is, its size, hidden ones, extra buttons.
+        @JavascriptInterface fun setLayout(json: String) = main.post { core.remote.setLayout(json) }.let { }
         // The gamepad's state, as a Bluetooth gamepad (BtPad: remote.html while a computer is connected to it).
         @JavascriptInterface fun pad(b: Int, lx: Double, ly: Double, rx: Double, ry: Double, lt: Double, rt: Double) {
             if (core.btPadMade) core.btPad.pad(b, lx, ly, rx, ry, lt, rt)
@@ -176,7 +184,7 @@ class Screen(core: Core) : Feature(core) {
             val ok = runCatching { ctx.startActivity(android.content.Intent(ctx, ViewerActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
             if (ok) return
         }
-        Notify.screen(ctx, core.host?.name ?: "Your computer")
+        Notify.screen(ctx, core.host?.name ?: tr("Your computer"))
     }
 
     fun detach(h: WebHost) {
@@ -200,10 +208,12 @@ class Screen(core: Core) : Feature(core) {
     // display it shares, e.g. the Mac's "TwinDesk (virtual)"; a PC or Linux sends none).
     // touch: "pad" (slide moves the pointer, tap clicks) or "direct" (the
     // pointer goes where the finger is, tap = click); speed and tap are the Remote page's touchpad settings;
-    // pen: a stylus is a pen on the computer (its pressure, tilt, eraser), else a mouse.
+    // pen: a stylus is a pen on the computer (its pressure, tilt, eraser), else a mouse; penFast: a
+    // stroke's samples batched per event (Fast writing), else each its own, paced (every point lands).
     fun opts(): JSONObject = msg("opts", "sound" to core.store.flag("screen.sound", false), "pacing" to (core.store.flag("screen.smooth", false).let { if (it) "smooth" else "fast" }),
         "name" to (core.host?.name ?: "the computer"), "touch" to (if (core.store.flag("screen.touchpad", true)) "pad" else "direct"),
-        "speed" to core.remote.speed.toDouble(), "tap" to core.remote.tapClick, "pen" to core.store.flag("screen.pen", true))
+        "speed" to core.remote.speed.toDouble(), "tap" to core.remote.tapClick, "pen" to core.store.flag("screen.pen", true),
+        "penFast" to core.store.flag("screen.penFast", false))
 
     // The touchpad settings changed on the Remote page: an open viewer follows.
     fun repost() { host?.post(opts()) }

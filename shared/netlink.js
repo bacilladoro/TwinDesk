@@ -17,6 +17,10 @@
 //
 // Sent files wait (holdOut) until the session is on Wi-Fi, or go through Bluetooth when it can't be.
 //
+// An iPhone or iPad hosts and joins nothing: it moves the session onto the network both are on itself
+// (hello {resume}) once TwinDesk is open there. Asked with net.need, it shows a notification when it's
+// off screen; files wait for it up to OPEN_TIMEOUT_MS, then go through Bluetooth.
+//
 // Events: 'change' — view changed; 'dropped' — Back to Bluetooth on the other side.
 'use strict';
 
@@ -30,6 +34,7 @@ const T = P.T;
 const GROUP_NETS = ['192.168.49.', '10.42.', '192.168.137.', '192.168.43.', '172.20.10.'];
 const ASK_TIMEOUT_MS = 60000; // the network up, joined and the session moved onto it, by then
 const HOTSPOT_TIMEOUT_MS = 180000; // the person switches the hotspot on and types its password
+const OPEN_TIMEOUT_MS = 300000; // an iPhone: the person opens TwinDesk there (its notification)
 const LINGER_MS = 15000; // nobody needs it: wait this long before taking it down (another file)
 const FILES_IDLE_MS = 20000; // 'files' is needed while files move, and this long after
 const HOLD = new Set([T.FILE_OFFER, T.DRAG_START]); // these wait for Wi-Fi; what follows them comes after
@@ -57,7 +62,7 @@ class NetLink extends EventEmitter {
     this.timers = {};
     this.generation = 0;
     this.hostReady = false;
-    setInterval(() => this._tick(), 1000).unref();
+    this.ticker = null; // the 1 s check: only while something waits for Wi-Fi or needs it (_arm)
   }
 
   // The session runs on the link made here (an address in a Wi-Fi Direct group's or a hotspot's
@@ -149,12 +154,14 @@ class NetLink extends EventEmitter {
       if (this.linked) {
         if (!this.needs.has(why)) this.o.send({ t: T.NET_NEED, why, keep: true });
         this.needs.set(why, { idleMs, last: Date.now() });
+        this._arm();
         clearTimeout(this.timers.linger);
         this.emit('change');
       }
       return Promise.resolve(true);
     }
     this.needs.set(why, { idleMs, last: Date.now() });
+    this._arm();
     clearTimeout(this.timers.linger);
     const done = new Promise((resolve) => this.waiters.push(resolve)); // first: _ensure can fail at once
     if (['idle', 'failed'].includes(this.state)) this._ensure(why);
@@ -234,6 +241,7 @@ class NetLink extends EventEmitter {
 
   _plan() {
     const c = this.o.current();
+    if (c && c.os === P.OS.IOS) return 'open'; // it comes onto the network itself (see the top)
     const them = this.peerCaps;
     if (!c || !them) return null;
     const meHost = this._canHost() && them.join;
@@ -247,6 +255,14 @@ class NetLink extends EventEmitter {
 
   _ensure(why) {
     const c = this.o.current();
+    if (c && c.os === P.OS.IOS) {
+      this.kind = 'open';
+      this.error = '';
+      this._set('asking');
+      this._deadline(OPEN_TIMEOUT_MS);
+      this.o.send({ t: T.NET_NEED, why });
+      return;
+    }
     if (this.o.hotspot && this.o.hotspot(why, c && c.os)) {
       this.kind = 'hotspot';
       this.error = '';
@@ -421,7 +437,18 @@ class NetLink extends EventEmitter {
     this.emit('change');
   }
 
+  _arm() {
+    if (this.ticker) return;
+    this.ticker = setInterval(() => this._tick(), 1000);
+    this.ticker.unref();
+  }
+
   _tick() {
+    if (!this.waiters.length && !this.needs.size) {
+      clearInterval(this.ticker);
+      this.ticker = null;
+      return;
+    }
     if (this.waiters.length && !this.onBle && this.o.current()) {
       clearTimeout(this.timers.ask);
       this._settle(true);

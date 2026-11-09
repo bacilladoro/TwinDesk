@@ -81,9 +81,13 @@ class Pipe {
 class BleHost extends EventEmitter {
   // info() -> this device's beacon {id, name, os, port, fp}; server: ours (server.blePorts is set here);
   // accept({id, name, os}) -> false: that guest is turned away (Linux: Bluetooth with computers off).
-  constructor({ helper, server, info, enabled = () => true, accept = () => true }) {
+  // hold() -> true while not enabled(): quiet, but the links that are up stay (the Mac helper's bleHold:
+  // no advertising, a slow interval; an iPhone's link, which wakes TwinDesk there). Helpers without it: off.
+  // holdAds() -> true: held, but still advertising (an iPhone in the session isn't linked yet: without
+  // it, any other device's link kept this computer silent and the iPhone never found it).
+  constructor({ helper, server, info, enabled = () => true, accept = () => true, hold = () => false, holdAds = () => false }) {
     super();
-    Object.assign(this, { helper, server, info, enabled, accept });
+    Object.assign(this, { helper, server, info, enabled, accept, hold, holdAds });
     this.state = 'off';
     this.wanted = false; // advertising asked for (enabled(): blepolicy.js)
     this.guests = new Map(); // dev -> {id, name, os, at}
@@ -99,15 +103,24 @@ class BleHost extends EventEmitter {
   apply() {
     if (!this.helper.running) return;
     const on = !!this.enabled();
-    const key = on ? JSON.stringify(this.info()) : '';
+    const hold = !on && !!this.applied && !!this.hold(); // only from up: a stopped service has no links to keep
+    const ads = hold && !!this.holdAds();
+    const key = on ? JSON.stringify(this.info()) : hold ? (ads ? 'hold+ads' : 'hold') : '';
     if (on !== this.wanted) {
       this.wanted = on;
       this.emit('change');
     }
     if (key === this.applied) return;
+    const wasHeld = this.applied === 'hold' || this.applied === 'hold+ads';
     this.applied = key;
     if (on) this.helper.request('bleStart', { info: key }).catch((e) => console.log(`[ble] ${e.message}`));
-    else {
+    else if (hold) {
+      this.helper.request('bleHold', { advertise: ads }).catch(() => {});
+      // Into hold, the session is on Wi-Fi: links idle, guests kept. Only advertising changing within
+      // it (the iPhone just linked) leaves a pipe it may be opening alone.
+      if (!wasHeld) for (const dev of [...this.pipes.keys()]) this._closePipe(dev);
+      this.emit('change');
+    } else {
       this.helper.request('bleStop').catch(() => {});
       for (const dev of [...this.pipes.keys()]) this._closePipe(dev);
       this.guests.clear();
@@ -160,7 +173,7 @@ class BleHost extends EventEmitter {
         const old = this.guests.get(dev);
         const g = { id: h.id.slice(0, 64), name: str(h.name, 64) || 'Device', os: Object.values(P.OS).includes(h.os) ? h.os : P.OS.ANDROID, at: Date.now() };
         if (!this.accept(g)) {
-          if (!this.refused.has(dev)) console.log(`[ble] ${g.name} turned away: Bluetooth with ${g.os === P.OS.ANDROID ? 'phones' : 'computers'} is off`);
+          if (!this.refused.has(dev)) console.log(`[ble] ${g.name} turned away: Bluetooth with ${P.isPhoneOs(g.os) ? 'phones' : 'computers'} is off`);
           this.refused.add(dev);
           this._closePipe(dev);
           if (this.guests.delete(dev)) this.emit('change');

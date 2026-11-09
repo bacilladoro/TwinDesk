@@ -21,6 +21,11 @@ import javax.net.ssl.X509TrustManager
 
 private const val FALLBACK_MS = 5000L // on the network this long, answering: its Bluetooth fallback goes (dropAlt)
 private const val ANSWERING_MS = 3000L // … answering = something came through it this recently
+// Quiet links (shared/quiet.js): the same numbers as the computers'.
+private const val QUIET_IDLE = "idle"
+private const val QUIET_ACTIVE_MS = 15000L
+private const val QUIET_PING_MS = 5 * 60 * 1000L
+private const val QUIET_TIMEOUT_MS = 11 * 60 * 1000L
 
 data class PairState(
     val phase: String, // connecting | starting | code | waiting | failed
@@ -37,6 +42,8 @@ data class PairState(
 class Link(
     private val store: Store,
     private val events: Events,
+    // Where paired hosts are kept: the computers ("hosts"), or another phone (Peer.kt: "peerHosts").
+    private val hostsKey: String = "hosts",
 ) {
     interface Events {
         fun onChange()
@@ -76,12 +83,52 @@ class Link(
     private var pendingAddress = ""
     private val lastRxOf = java.util.concurrent.ConcurrentHashMap<WebSocket, Long>()
     private var helloTimer: ScheduledFuture<*>? = null
+
+    // Quiet links (shared/quiet.js, #143): while nothing is live here and the computer says the same
+    // (`idle {on}`), the session stops pinging every second and the radio and CPU can sleep: one ping
+    // every QUIET_PING_MS, closed after QUIET_TIMEOUT_MS of silence. A message sent while quiet is
+    // followed by one ping (a probe): no answer within TIMEOUT_MS and the socket closes (and the
+    // session comes back). Messages don't end the quiet; busyHere (Core: something live here), the
+    // computer saying busy or wake() do. A computer that never says idle (an older app) keeps today's
+    // pings. Not through Bluetooth.
+    @Volatile var busyHere: () -> Boolean = { false }
+    @Volatile var keepPinging = false
+    @Volatile private var peerIdle = false
+    @Volatile private var saidIdle = false
+    @Volatile private var lastUse = 0L // the session's start: active for QUIET_ACTIVE_MS
+    @Volatile private var probeAt = 0L
+    private var probed = false
+    @Volatile private var wokeAt = 0L
+    @Volatile private var quietSince = 0L
+    private var quietEnd = 0L
+    private var quietPing = 0L
+    val quiet: Boolean get() = quietSince != 0L
+
+    // The screen came on, the network changed, the app opened: active again for a while, so a session
+    // that died in the quiet is found within TIMEOUT_MS. Also when a hold starts or ends (Core.changed).
+    fun wake() { wokeAt = System.currentTimeMillis(); if (pinger != null) runCatching { exec.execute { beat() } } }
+    // Only says this side's idle state if it changed (no pings: Core.changed() calls this often).
+    fun nudge() { if (pinger != null) runCatching { exec.execute { if (state == "connected") sayIdle(System.currentTimeMillis()) } } }
+
+    private fun idleHere(now: Long) = !keepPinging && !runCatching { busyHere() }.getOrDefault(true) && now - maxOf(lastUse, wokeAt) >= QUIET_ACTIVE_MS
+
+    private fun sayIdle(now: Long): Boolean {
+        val mine = idleHere(now)
+        if (mine != saidIdle) { ws?.let { w -> if (!ble && w.send(msg(QUIET_IDLE, "on" to mine).toString())) saidIdle = mine } }
+        return mine
+    }
     var bleRx: () -> Long = { 0L } // Ble.lastDown: bytes arriving through Bluetooth count as alive
     // Fast files (Proto.FX_PATH): the session's token from welcome {fx}; none from a computer that can't.
     @Volatile private var fxToken = ""
     // … and welcome {fxPlain: {port, token}}: the computer allows unencrypted file transfers (its
     // Files › Encrypt file transfers off). We always allow them (hello {fxPlain: 1}): the computer decides.
     @Volatile private var fxPlain: Fx.Plain? = null
+<<<<<<< HEAD
+=======
+    // … and fast files v2 (the computers' shared/fx2.js, Fx2.kt): welcome {fx2: {port}}, the port of
+    // the computer's files engine (0: none, an older computer).
+    @Volatile private var fx2Port = 0
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     private var fxClient: Pair<String, OkHttpClient>? = null // (pinned fingerprint, client), kept for its connections
 
     private fun run(block: () -> Unit) = exec.execute { try { block() } catch (e: Exception) { Log.e("TwinDesk", "link", e) } }
@@ -166,6 +213,7 @@ class Link(
     fun send(m: JSONObject): Boolean {
         val w = ws ?: return false
         if (state != "connected") return false
+        if (quietSince != 0L && probeAt == 0L) probeAt = System.currentTimeMillis()
         return w.send(m.toString())
     }
 
@@ -221,18 +269,32 @@ class Link(
         return client(fp).newBuilder().readTimeout(0, TimeUnit.MILLISECONDS).writeTimeout(0, TimeUnit.MILLISECONDS).build()
     }
 
+<<<<<<< HEAD
     // Fast files for the next file: the computer gave a token, and the session is on the network or
     // a cable (as the computers' fastfile.js usable()). Else the bytes go as file.chunk.
     // plain: unencrypted (FxHttp) to `address` on that port, with its own token; null: HTTPS (client).
     class Fx(val base: String, val token: String, val client: OkHttpClient, val address: String, val plain: Plain?) {
         class Plain(val port: Int, val token: String)
+=======
+    // Fast files for the next file: the computer gave a token, and the session is on the network, a
+    // cable or a Wi-Fi Direct group / hotspot (as the computers' fastfile.js usable()). Else the bytes
+    // go as file.chunk. plain: unencrypted (FxHttp) to `address` on that port, with its own token;
+    // null: HTTPS (client). fx2Port: the computer's files engine (fx2, Fx2.kt), 0 when there's none
+    // (an older computer, or through the cable: adb reverse carries only the session's port);
+    // plain.fx2Port: its plain server.
+    class Fx(val base: String, val token: String, val client: OkHttpClient, val address: String, val plain: Plain?, val fx2Port: Int = 0) {
+        class Plain(val port: Int, val token: String, val fx2Port: Int = 0)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     }
 
     fun fx(): Fx? {
         val token = fxToken
         if (state != "connected" || ble || token.isEmpty()) return null
         val (address, port) = endpoint() ?: return null
+<<<<<<< HEAD
         if (Proto.GROUP_NETS.any { address.startsWith(it) }) return null
+=======
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         val fp = host?.fp ?: return null
         val c = synchronized(this) {
             fxClient?.takeIf { it.first == fp }?.second ?: client(fp).newBuilder()
@@ -242,7 +304,11 @@ class Link(
         val h = if (address.contains(':')) "[$address]" else address
         // Not through the cable: adb reverse carries only the session's port.
         val plain = if (wired) null else fxPlain
+<<<<<<< HEAD
         return Fx("https://$h:$port${Proto.FX_PATH}", token, c, address, plain)
+=======
+        return Fx("https://$h:$port${Proto.FX_PATH}", token, c, address, plain, if (wired) 0 else fx2Port)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     }
 
     // Self-signed certificates: the fingerprint is the identity (pinned once paired).
@@ -264,6 +330,10 @@ class Link(
         }
         val ssl = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
         return OkHttpClient.Builder()
+<<<<<<< HEAD
+=======
+            .socketFactory(NoDelaySockets)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
             .sslSocketFactory(ssl.socketFactory, trust)
             .hostnameVerifier { _, _ -> true }
             .connectTimeout(5, TimeUnit.SECONDS)
@@ -300,7 +370,7 @@ class Link(
         ble = false
         movedAt = System.currentTimeMillis()
         host?.let { h ->
-            if (h.address != pendingAddress) { h.address = pendingAddress; store.putHost(h) }
+            if (h.address != pendingAddress) { h.address = pendingAddress; store.putHost(h, hostsKey) }
         }
         Log.i("TwinDesk", "session moved to $pendingAddress")
         events.onChange()
@@ -317,7 +387,7 @@ class Link(
         alt = null
         lastRxOf.remove(a)
         a.close(1000, null)
-        Log.i("TwinDesk", "Bluetooth fallback closed: the session stays on Wi-Fi")
+        Log.i("TwinDesk", "Bluetooth fallback closed. The connection remains on Wi-Fi")
         events.onChange()
     }
 
@@ -375,9 +445,13 @@ class Link(
 
     private fun hello() {
         val h = host ?: return
+<<<<<<< HEAD
         raw(msg(Proto.T.HELLO, "v" to Proto.VERSION, "id" to store.deviceId, "name" to store.deviceName, "os" to Proto.OS, "token" to h.token, "fx" to 1, "fxPlain" to 1))
+=======
+        raw(msg(Proto.T.HELLO, "v" to Proto.VERSION, "id" to store.deviceId, "name" to store.deviceName, "os" to Proto.OS, "token" to h.token, "fx" to 1, "fxPlain" to 1).apply { if (!wired) put("fx2", 1) })
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         helloTimer?.cancel(false)
-        helloTimer = exec.schedule({ if (state != "connected") { message = "No answer"; ws?.cancel() } }, if (ble) Proto.BLE_TIMEOUT_MS else Proto.TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        helloTimer = exec.schedule({ if (state != "connected") { message = tr("No answer"); ws?.cancel() } }, if (ble) Proto.BLE_TIMEOUT_MS else Proto.TIMEOUT_MS, TimeUnit.MILLISECONDS)
     }
 
     private fun onText(text: String) {
@@ -387,11 +461,12 @@ class Link(
         when (t) {
             Proto.T.PAIR_NONCE -> return onNonce(m)
             Proto.T.PAIR_OK -> return onPairOk(m)
-            Proto.T.PAIR_CANCEL -> return pairFailed("Pairing was cancelled on the computer.")
+            Proto.T.PAIR_CANCEL -> return pairFailed(tr("Pairing was cancelled on the computer."))
             Proto.T.WELCOME -> return onWelcome(m)
             Proto.T.ERROR -> return onError(m)
             Proto.T.PING -> { if (state == "connected") raw(msg(Proto.T.PONG, "ts" to m.opt("ts"))); return }
             Proto.T.PONG -> { if (m.has("ts")) rttMs = maxOf(0, System.currentTimeMillis() - m.optLong("ts")); return }
+            QUIET_IDLE -> { if (state == "connected") { val was = peerIdle; peerIdle = m.optBoolean("on"); if (was != peerIdle) nudge() }; return }
         }
         if (state == "connected") events.onMessage(m)
     }
@@ -400,7 +475,7 @@ class Link(
         val p = pair ?: return
         val nonce = m.optString("nonce")
         if (mode != "pair" || nw.isEmpty() || !Regex("^[0-9a-f]{32,128}$").matches(nonce) || nonce.length % 2 != 0) {
-            return pairFailed("The computer sent a bad pairing message.")
+            return pairFailed(tr("The computer sent an invalid pairing response."))
         }
         raw(msg(Proto.T.PAIR_REVEAL, "nonce" to nw))
         pair = p.copy(phase = "code", code = Proto.sasCode(seenFp, nw, nonce))
@@ -416,13 +491,13 @@ class Link(
         if (mode != "pair" || p.phase != "waiting") return
         val token = m.optString("token")
         val id = m.optString("macId")
-        if (token.isEmpty() || id.isEmpty()) return pairFailed("The computer sent a bad pairing message.")
+        if (token.isEmpty() || id.isEmpty()) return pairFailed(tr("The computer sent an invalid pairing response."))
         // Through the cable the address is this phone's own end of adb reverse: the computer's
         // network address comes from discovery when it's seen (Core.connect), else the cable again.
         // Through Bluetooth likewise: no network address yet (Core keeps the pipe for it).
         val h = if (p.wired || p.ble) Host(id, m.optString("macName").take(64).ifEmpty { p.name }, m.optString("os", "mac"), "127.0.0.1", Proto.PORT, seenFp, token, System.currentTimeMillis())
             else Host(id, m.optString("macName").take(64).ifEmpty { p.name }, m.optString("os", "mac"), p.address, p.port, seenFp, token, System.currentTimeMillis())
-        store.putHost(h)
+        store.putHost(h, hostsKey)
         pair = null
         mode = "session"
         host = h
@@ -437,55 +512,102 @@ class Link(
         helloTimer?.cancel(false)
         val h = host ?: return
         m.optString("macName").takeIf { it.isNotEmpty() }?.let { h.name = it.take(64) }
+        if (m.has("tail")) h.tail = Tailnet.clean(m.optJSONArray("tail")) // its Tailscale addresses (Tailnet.kt)
         h.lastSeen = System.currentTimeMillis()
-        store.putHost(h)
+        store.putHost(h, hostsKey)
         rttMs = null
         resumeKey = m.optString("resume")
         fxToken = m.optString("fx").takeIf { Regex("^[0-9a-f]{32}$").matches(it) } ?: ""
         fxPlain = m.optJSONObject("fxPlain")?.let { p ->
             val port = p.optInt("port", 0)
             val token = p.optString("token")
+<<<<<<< HEAD
             if (port in 1..65535 && Regex("^[0-9a-f]{32}$").matches(token)) Fx.Plain(port, token) else null
         }
+=======
+            val p2 = p.optInt("fx2Port", 0).takeIf { it in 1..65535 } ?: 0
+            if (port in 1..65535 && Regex("^[0-9a-f]{32}$").matches(token)) Fx.Plain(port, token, p2) else null
+        }
+        fx2Port = m.optJSONObject("fx2")?.optInt("port", 0)?.takeIf { it in 1..65535 && fxToken.isNotEmpty() } ?: 0
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         ws?.let { lastRxOf[it] = System.currentTimeMillis() }
         // Each of the session's sockets on its own: a quiet fallback goes, the session lives on.
-        pinger = exec.scheduleWithFixedDelay({
-            val now = System.currentTimeMillis()
-            for (w in listOfNotNull(ws, alt)) {
-                val onBle = if (w === ws) ble else altBle
-                val limit = if (onBle) Proto.BLE_TIMEOUT_MS else Proto.TIMEOUT_MS
-                val rx = maxOf(lastRxOf[w] ?: lastRx, if (onBle) bleRx() else 0L)
-                if (now - rx > limit) {
-                    Log.i("TwinDesk", "${if (onBle) "Bluetooth" else "network"} socket silent for ${now - rx} ms, closing")
-                    if (w === ws && alt == null) message = "Stopped answering"
-                    w.cancel()
-                } else w.send(msg(Proto.T.PING, "ts" to now).toString())
-            }
-        }, Proto.PING_MS, Proto.PING_MS, TimeUnit.MILLISECONDS)
+        peerIdle = false
+        saidIdle = false
+        quietSince = 0L
+        quietEnd = 0L
+        probeAt = 0L
+        probed = false
+        lastUse = System.currentTimeMillis()
+        pinger = exec.scheduleWithFixedDelay({ beat() }, Proto.PING_MS, Proto.PING_MS, TimeUnit.MILLISECONDS)
         setState("connected", "")
         events.onWelcome(h)
     }
 
-    private val pairErrors = mapOf(
-        Proto.E.PAIR_REFUSED to "Pairing was refused.",
-        Proto.E.PAIR_TIMEOUT to "Pairing timed out.",
-        Proto.E.BUSY to "That computer is busy pairing with another device.",
-        Proto.E.VERSION_MISMATCH to "That computer runs a different TwinDesk version. Update both.",
+    // Each of the session's sockets on its own: a quiet fallback goes, the session lives on.
+    private fun beat() {
+        if (state != "connected") return
+        val now = System.currentTimeMillis()
+        // Quiet (both ends idle): only the network socket's own rule changes; Bluetooth as before.
+        val mine = sayIdle(now)
+        val quietNow = mine && peerIdle && !ble
+        if (quietNow && quietSince == 0L) { quietSince = now; Log.i("TwinDesk", "link quiet: pings every ${QUIET_PING_MS / 60000} min") }
+        if (!quietNow && quietSince != 0L) { quietSince = 0L; quietEnd = now; probeAt = 0L; probed = false; Log.i("TwinDesk", "link active: pings every second") }
+        run {
+            for (w in listOfNotNull(ws, alt)) {
+                val onBle = if (w === ws) ble else altBle
+                val limit = if (onBle) Proto.BLE_TIMEOUT_MS else Proto.TIMEOUT_MS
+                val rx = maxOf(lastRxOf[w] ?: lastRx, if (onBle) bleRx() else 0L, if (onBle) 0L else quietEnd)
+                if (!onBle && quietNow) {
+                    if (w === ws && probeAt != 0L) { // something went out while quiet: is anyone there?
+                        if (rx >= probeAt) { probeAt = 0L; probed = false }
+                        else if (!probed) { probed = true; quietPing = now; w.send(msg(Proto.T.PING, "ts" to now).toString()); continue }
+                        else if (now - probeAt > Proto.TIMEOUT_MS) {
+                            Log.i("TwinDesk", "no answer on a quiet link, closing")
+                            if (alt == null) message = tr("Not responding")
+                            w.cancel()
+                            continue
+                        } else continue
+                    }
+                    if (now - rx > QUIET_TIMEOUT_MS) {
+                        Log.i("TwinDesk", "network socket silent for ${now - rx} ms on a quiet link, closing")
+                        if (w === ws && alt == null) message = tr("Not responding")
+                        w.cancel()
+                    } else if (now - maxOf(quietPing, quietSince) >= QUIET_PING_MS) {
+                        quietPing = now
+                        w.send(msg(Proto.T.PING, "ts" to now).toString())
+                    }
+                    continue
+                }
+                if (now - rx > limit) {
+                    Log.i("TwinDesk", "${if (onBle) "Bluetooth" else "network"} socket silent for ${now - rx} ms, closing")
+                    if (w === ws && alt == null) message = tr("Not responding")
+                    w.cancel()
+                } else w.send(msg(Proto.T.PING, "ts" to now).toString())
+            }
+        }
+    }
+
+    private val pairErrors get() = mapOf(
+        Proto.E.PAIR_REFUSED to tr("Pairing was refused."),
+        Proto.E.PAIR_TIMEOUT to tr("Pairing timed out."),
+        Proto.E.BUSY to tr("That computer is busy pairing with another device."),
+        Proto.E.VERSION_MISMATCH to tr("That computer runs a different version of TwinDesk. Update both devices."),
     )
 
     private fun onError(m: JSONObject) {
         val code = m.optString("code")
         lastCode = code
-        if (mode == "pair") return pairFailed(pairErrors[code] ?: "Pairing failed ($code).")
+        if (mode == "pair") return pairFailed(pairErrors[code] ?: tr("Pairing failed ({code}).", "code" to code))
         message = when (code) {
-            Proto.E.BAD_TOKEN -> "${host?.name ?: "The computer"} forgot this phone. Pair again."
-            Proto.E.BUSY -> m.optString("message").ifEmpty { "Busy with another device" }
-            Proto.E.REPLACED -> m.optString("message").ifEmpty { "Another device connected" }
-            Proto.E.RELEASED -> "Disconnected from ${host?.name ?: "the computer"}"
-            Proto.E.ASLEEP -> "${host?.name ?: "The computer"} is asleep"
-            else -> "Closed ($code)"
+            Proto.E.BAD_TOKEN -> tr("{name} forgot this phone. Pair again.", "name" to (host?.name ?: tr("The computer")))
+            Proto.E.BUSY -> m.optString("message").ifEmpty { tr("Busy with another device") }
+            Proto.E.REPLACED -> m.optString("message").ifEmpty { tr("Another device connected") }
+            Proto.E.RELEASED -> tr("Disconnected from {name}", "name" to (host?.name ?: tr("the computer")))
+            Proto.E.ASLEEP -> tr("{name} is asleep", "name" to (host?.name ?: tr("The computer")))
+            else -> tr("Closed ({code})", "code" to code)
         }
-        if (code == Proto.E.BAD_TOKEN) host?.let { store.forgetHost(it.id) }
+        if (code == Proto.E.BAD_TOKEN) host?.let { store.forgetHost(it.id, hostsKey) }
     }
 
     private fun pairFailed(error: String) {
@@ -507,21 +629,27 @@ class Link(
     private fun onClose(failure: String?) {
         Log.i("TwinDesk", "link closed: mode=$mode state=$state ble=$ble failure=$failure code=$lastCode")
         pinger?.cancel(false)
+        pinger = null
+        quietSince = 0L
         helloTimer?.cancel(false)
         ws = null
         fxToken = ""
         fxPlain = null
+<<<<<<< HEAD
+=======
+        fx2Port = 0
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         dropOthers()
         if (mode == "pair") {
             val p = pair
             if (p != null && p.phase != "failed") {
-                pairFailed(if (p.phase == "connecting") "Couldn’t connect to ${p.address}${failure?.let { " ($it)" } ?: ""}." else "The connection closed.")
+                pairFailed(if (p.phase == "connecting") tr("Couldn’t connect to {address}{reason}.", "address" to p.address, "reason" to (failure?.let { " ($it)" } ?: "")) else tr("The connection closed."))
             }
             return
         }
         val was = state
         if (failure == "identity") {
-            setState("failed", "${host?.name ?: "The computer"} looks different now. Forget it and pair again.")
+            setState("failed", tr("{name} looks different now. Forget it and pair again.", "name" to (host?.name ?: tr("The computer"))))
         } else {
             if (message.isEmpty() && failure != null) message = failure
             setState(if (was == "connected" || was == "connecting") "idle" else was, message)
@@ -536,6 +664,10 @@ class Link(
         ws = null
         fxToken = ""
         fxPlain = null
+<<<<<<< HEAD
+=======
+        fx2Port = 0
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         dropOthers()
         val wasConnected = state == "connected"
         if (wasConnected) state = "idle"
@@ -552,4 +684,17 @@ class Link(
         message = msg
         events.onChange()
     }
+}
+
+// The session's sockets without Nagle: input (a pen's 120–240 samples a second, pointer moves) goes
+// out at once instead of waiting for the computer to acknowledge what went before (40–200 ms with
+// its delayed ACKs). OkHttp leaves Nagle on; the TLS socket is layered over these.
+private object NoDelaySockets : javax.net.SocketFactory() {
+    private val base = javax.net.SocketFactory.getDefault()
+    private fun nd(s: java.net.Socket) = s.apply { runCatching { tcpNoDelay = true } }
+    override fun createSocket() = nd(base.createSocket())
+    override fun createSocket(host: String?, port: Int) = nd(base.createSocket(host, port))
+    override fun createSocket(host: String?, port: Int, localHost: java.net.InetAddress?, localPort: Int) = nd(base.createSocket(host, port, localHost, localPort))
+    override fun createSocket(host: java.net.InetAddress?, port: Int) = nd(base.createSocket(host, port))
+    override fun createSocket(address: java.net.InetAddress?, port: Int, localAddress: java.net.InetAddress?, localPort: Int) = nd(base.createSocket(address, port, localAddress, localPort))
 }

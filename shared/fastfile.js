@@ -5,8 +5,9 @@
 // file.chunk messages (data a Buffer) from deliver(), so the receivers need only take a Buffer.
 //
 // Only when both apps said so (hello {fx: 1}, welcome {fx: token}, the token a secret of this
-// session) and the session runs on the network or a cable, never through Bluetooth or a link
-// netlink.js made (Wi-Fi Direct, a hotspot): those keep file.chunk. An older app never says so.
+// session) and the session runs on the network, a cable or a link netlink.js made (Wi-Fi Direct, a
+// hotspot), never through Bluetooth: that keeps file.chunk. An older app never says so. On a link
+// netlink.js made, the bytes keep it up as file.chunk does (active(): netlink.touch('files')).
 //
 // The guest connects, as it does for the session: it PUTs what it sends, and GETs what the host
 // sends when the host says file.pull. It pins the host's certificate as the session does; the host
@@ -35,7 +36,10 @@ const https = require('https');
 const fs = require('fs');
 const crypto = require('crypto');
 const P = require('./protocol.js');
+<<<<<<< HEAD
 const { GROUP_NETS } = require('./netlink.js');
+=======
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 const awake = require('./awake.js');
 
 const T = P.T;
@@ -48,6 +52,7 @@ const READ_BYTES = 1024 * 1024; // read from disk at a time
 const CHUNK_BYTES = 512 * 1024; // bytes per file.chunk handed to the receiver
 const PULL_MS = 10000; // the guest didn't come for a file: it goes the old way
 const IDLE_MS = 30000; // no bytes this long: the transfer failed
+const RETRY2_MS = 60000; // fx2 failed before a byte went: the fx way this long, then fx2 is tried again (#143)
 
 // No TLS session resumption: a resumed connection has no peer certificate to pin.
 const agent = () => new https.Agent({ keepAlive: true, maxSockets: PARALLEL_SMALL + 2, rejectUnauthorized: false, maxCachedSessions: 0 });
@@ -76,7 +81,13 @@ class FastFiles {
     // guest's GETs); in2 id -> {hook, hashes, end} (a file the engine brings in); ends id -> hashes for
     // file.end; hooks: the receivers'.
     this.fx2 = opts.fx2 || null;
+<<<<<<< HEAD
     this.broken2 = false;
+=======
+    this.broken2Until = 0; // broken2 (below): fx2 failed early, the fx way until then
+    this.why2 = ''; // … and why, for Engines in use and the fallback notice
+    this.onFallback = null; // (info {from, to, why}) the app says it once (main.js)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     this.out2 = new Map();
     this.in2 = new Map();
     this.ends = new Map();
@@ -98,6 +109,167 @@ class FastFiles {
     this.plainOn = false;
     this.plainServer = null;
     this.plainPort = 0;
+<<<<<<< HEAD
+  }
+
+  // ---- unencrypted file transfers (fxPlain) ----
+
+  // Files › Encrypt file transfers, off = on here: our plain servers listen (as the host), and we
+  // say so in hello (as the guest). A session already going keeps what it agreed, except that our
+  // plain servers close when it's turned back off (its files then go the TLS way).
+  setPlain(on) {
+    on = !!on;
+    if (on === this.plainOn) return;
+    this.plainOn = on;
+    if (on) this._listenPlain();
+    else {
+      if (this.plainServer) this.plainServer.close();
+      this.plainServer = null;
+      this.plainPort = 0;
+      this.plainAgent.destroy();
+      this.plainAgent = plainAgent();
+    }
+    if (this.fx2) this.fx2.setPlain(on);
+    this.tokens2 = null;
+    this._syncTokens();
+  }
+
+  _listenPlain() {
+    const srv = http.createServer((req, res) => {
+      if (this.request(req, res, true)) return;
+      res.writeHead(404);
+      res.end();
+    });
+    srv.keepAliveTimeout = 60000;
+    srv.requestTimeout = 0; // not Node's 5-min cap on a whole request: a big upload outlasts it; idle timeouts catch stalls
+    srv.on('error', (e) => console.warn(`[fx] plain server: ${e.code || e.message}`));
+    srv.listen(0, '0.0.0.0', () => {
+      if (this.plainServer !== srv) return srv.close();
+      this.plainPort = srv.address().port;
+      console.log(`[fx] unencrypted files on port ${this.plainPort}`);
+    });
+    this.plainServer = srv;
+  }
+
+  // The guest's hello field.
+  plainHello() {
+    return this.plainOn ? { fxPlain: 1 } : {};
+  }
+
+  // The host's welcome field for a session (ctx: fx, fxPlainWanted from its hello); sets ctx.fxPlain,
+  // the session's plain token ('' when it stays encrypted).
+  plainOffer(ctx) {
+    const ok = !!ctx && !!ctx.fx && ctx.fxPlainWanted === true && this.plainOn && this.plainPort > 0;
+    if (ctx) ctx.fxPlain = ok ? P.randomHex(16) : '';
+    if (!ok) return {};
+    const fx2Port = this.fx2 && this.fx2.plainPort > 0 ? this.fx2.plainPort : 0;
+    return { fxPlain: { port: this.plainPort, ...(fx2Port ? { fx2Port } : {}), token: ctx.fxPlain } };
+  }
+
+  // The guest's side of welcome {fxPlain}: {port, fx2Port, token}, or null (encrypted).
+  static parsePlain(msg) {
+    const p = msg && msg.fxPlain;
+    if (!p || typeof p !== 'object' || !okPort(p.port) || typeof p.token !== 'string' || !TOKEN.test(p.token)) return null;
+    return { port: p.port, fx2Port: okPort(p.fx2Port) ? p.fx2Port : 0, token: p.token };
+  }
+
+  // As guest: where our requests go — plain when both agreed (and we still allow it), else the session's port over TLS.
+  _to(s) {
+    if (this.plainOn && s.plain && okPort(s.plain.port)) return { mod: http, port: s.plain.port, token: s.plain.token, agent: this.plainAgent, plain: true };
+    return { mod: https, port: s.port, token: s.token, agent: this.agent, plain: false };
+  }
+
+  _to2(s) {
+    if (this.plainOn && s.plain && okPort(s.plain.fx2Port)) return { host: s.address, port: s.plain.fx2Port, token: s.plain.token, plain: true };
+    return { host: s.address, port: s.fx2Port, fp: s.fp, token: s.token };
+  }
+
+  // A receiver's backpressure: after each chunk, fn(id) -> a promise (the transfer waits for it)
+  // or null. The bytes stay in the socket meanwhile, not in memory.
+  pressure(fn) {
+    this.pressures.push(fn);
+  }
+
+  // A receiver's hook for fx2 files: {target(id, size) -> tmp path | Promise | null (not ours, not
+  // the size it accepted, or bytes already came), untarget(id) (it goes the old way after all), adopt(id) (every byte is in
+  // tmp and checked: finish as file.end would), fail(id, why), progress?(id, n)}.
+  receiver(hook) {
+    this.hooks.push(hook);
+  }
+
+  // fx2 for the next file: fx can, and both apps have the engine.
+  usable2() {
+    if (!this.fx2 || this.broken2 || !this.usable()) return false;
+    const s = this.o.session();
+    return !!s.fx2 && (s.host ? this.fx2.ready : this.fx2.client && Number.isInteger(s.fx2Port));
+  }
+
+  // file.end's extra field for a file that went through fx2 (once), else nothing.
+  endFields(id) {
+    const h = this.ends.get(id);
+    this.ends.delete(id);
+    return h ? { fx2: h } : {};
+  }
+
+  // The host's engine takes the session's token (and only it).
+  _syncTokens() {
+    if (!this.fx2) return;
+    const s = this.o.session();
+    const t = s && s.host && s.fx2 && s.token ? s.token : '';
+    const pt = t && this.plainOn && s.plainToken ? s.plainToken : '';
+    if (t + pt === this.tokens2) return;
+    this.tokens2 = t + pt;
+    this.fx2.setTokens(t ? [t] : [], pt ? [pt] : []);
+=======
+    // () on bytes either way: a link made for files (netlink.js) stays up while they move.
+    this.active = null;
+    // The last file's way (Settings › General › Advanced, shared/engines.js): {way: 'fx2' | 'fx' |
+    // 'chunk', dir: 'send' | 'recv', plain, at}.
+    this.last = null;
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
+  }
+
+  _note(way, dir) {
+    const s = this.o.session();
+    this.last = { way, dir, plain: way !== 'chunk' && this._plainNow(s), at: Date.now() };
+  }
+
+  // The app sent a file.chunk (the old way): for describe()'s last.
+  sentChunk() {
+    if (!this.last || this.last.way !== 'chunk' || this.last.dir !== 'send') this._note('chunk', 'send');
+  }
+
+  _plainNow(s) {
+    return !!s && this.plainOn && !!(s.host ? s.plainToken : s.plain);
+  }
+
+  // What the next file uses and why (shared/engines.js): {next: 'fx2' | 'fx' | 'chunk', why: '' |
+  // 'peer' (the other app can't) | 'bluetooth' | 'failed' (it failed this session) | 'off' (here) |
+  // 'engine' (ours isn't up), plain, last}.
+  describe() {
+    const s = this.o.session();
+    const out = { next: 'chunk', why: '', plain: false, last: this.last };
+    if (!s || !s.token) return { ...out, why: 'peer' };
+    if (s.transport === 'ble' || String(s.address || '').startsWith('ble:')) return { ...out, why: 'bluetooth' };
+    if (this.broken) return { ...out, why: 'failed' };
+    out.plain = this._plainNow(s);
+    if (this.usable2()) return { ...out, next: 'fx2' };
+    return { ...out, next: 'fx', why: !this.fx2 ? 'off' : this.broken2 ? 'failed' : !s.fx2 ? 'peer' : 'engine', detail: this.broken2 ? this.why2 : '' };
+  }
+
+  // fx2 failed before a byte went: the fx way for RETRY2_MS, not for the whole session (a passing
+  // hiccup, the engine restarting, doesn't keep a session slow).
+  get broken2() { return Date.now() < this.broken2Until; }
+  set broken2(v) { this.broken2Until = v ? Date.now() + RETRY2_MS : 0; if (!v) this.why2 = ''; }
+
+  _fellBack(from, to, why) {
+    console.warn(`[files] ${from} -> ${to}: ${why}`);
+    if (this.onFallback) try { this.onFallback({ from, to, why: String(why || '').slice(0, 200) }); } catch (_) { /* the app's */ }
+  }
+
+  _active() {
+    awake.touch();
+    if (this.active) try { this.active(); } catch (_) { /* the app's */ }
   }
 
   // ---- unencrypted file transfers (fxPlain) ----
@@ -210,10 +382,10 @@ class FastFiles {
     this.fx2.setTokens(t ? [t] : [], pt ? [pt] : []);
   }
 
-  // Fast files for the next file: both sides can, on the network or a cable.
+  // Fast files for the next file: both sides can, on the network, a cable or a link made for it.
   usable() {
     const s = this.o.session();
-    return !this.broken && !!s && !!s.token && s.transport !== 'ble' && !GROUP_NETS.some((p) => String(s.address || '').startsWith(p));
+    return !this.broken && !!s && !!s.token && s.transport !== 'ble' && !String(s.address || '').startsWith('ble:');
   }
 
   // How many files go at once.
@@ -255,7 +427,11 @@ class FastFiles {
   send(id, path, size, onBytes) {
     if (!onBytes.awake) { // the computer stays awake while the bytes go (shared/awake.js)
       const tell = onBytes;
+<<<<<<< HEAD
       onBytes = (n) => { awake.touch(); tell(n); };
+=======
+      onBytes = (n) => { this._active(); tell(n); };
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       onBytes.awake = true;
     }
     if (this.outgoing.has(id) || this.out2.has(id)) return Promise.reject(new Error('file is already transferring'));
@@ -264,8 +440,14 @@ class FastFiles {
     if (this.usable2()) {
       return this._send2(s, id, path, size, onBytes).catch((e) => {
         if (!e.early) throw e;
+<<<<<<< HEAD
         console.warn(`[fx2] ${e.message}: files go the fx way for this session`);
         this.broken2 = true;
+=======
+        this.broken2 = true;
+        this.why2 = e.message;
+        this._fellBack('fx2', 'fx', e.message);
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
         return this.send(id, path, size, onBytes);
       });
     }
@@ -288,6 +470,10 @@ class FastFiles {
   _send2(s, id, path, size, onBytes) {
     const done = (hashes) => {
       this.ends.set(id, hashes);
+<<<<<<< HEAD
+=======
+      this._note('fx2', 'send');
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       return crypto.createHash('sha256').update(hashes.join(',')).digest('hex');
     };
     if (!s.host) {
@@ -358,7 +544,11 @@ class FastFiles {
   }
 
   _progress2(id, n) {
+<<<<<<< HEAD
     awake.touch();
+=======
+    this._active();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     const r = this.in2.get(id);
     if (r && r.hook.progress) try { r.hook.progress(id, n); } catch (_) { /* the receiver's */ }
   }
@@ -367,6 +557,10 @@ class FastFiles {
     const r = this.in2.get(id);
     if (!r) return;
     r.hashes = hashes;
+<<<<<<< HEAD
+=======
+    this._note('fx2', 'recv');
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     this._settle2(id, r);
   }
 
@@ -408,8 +602,8 @@ class FastFiles {
         done = true;
         if (this.outgoing.get(id) === w) this.outgoing.delete(id);
         if (w.rs) w.rs.destroy();
-        if (!err) return resolve(sha);
-        if (err.early) this.broken = true;
+        if (!err) { this._note('fx', 'send'); return resolve(sha); }
+        if (err.early) { if (!this.broken) this._fellBack('fx', 'file.chunk', err.message); this.broken = true; }
         reject(err);
       };
       const to = this._to(s);
@@ -479,6 +673,7 @@ class FastFiles {
       if (this.outgoing.get(id) !== w) return;
       this.outgoing.delete(id);
       rs.destroy();
+      this._note('fx', 'send');
       w.resolve(hash.digest('hex'));
     });
     res.on('close', () => this.outgoing.get(id) === w && !res.writableFinished && this._fail(id, new Error('the transfer stopped')));
@@ -493,7 +688,7 @@ class FastFiles {
     clearTimeout(w.timer);
     if (w.rs) w.rs.destroy();
     if (w.res) w.res.destroy();
-    if (err.early && !w.sent) this.broken = true;
+    if (err.early && !w.sent) { if (!this.broken) this._fellBack('fx', 'file.chunk', err.message); this.broken = true; }
     else delete err.early;
     w.reject(err);
   }
@@ -502,7 +697,14 @@ class FastFiles {
 
   // Every message from the peer before the feature code sees it: true when it was ours (or waits).
   incoming(msg) {
+<<<<<<< HEAD
     if (msg.t === T.FILE_CHUNK) awake.touch(); // the old way's bytes
+=======
+    if (msg.t === T.FILE_CHUNK) { // the old way's bytes
+      awake.touch();
+      if (!this.last || this.last.way !== 'chunk' || this.last.dir !== 'recv') this._note('chunk', 'recv');
+    }
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     switch (msg.t) {
       case T.FILE_END: {
         const r2 = this.in2.get(msg.id);
@@ -603,7 +805,11 @@ class FastFiles {
   _receive(id, stream, ok, r = this._track(id, stream)) {
     stream.on('data', (b) => {
       if (this.arriving.get(id) !== r) return;
+<<<<<<< HEAD
       awake.touch();
+=======
+      this._active();
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
       r.parts.push(b);
       r.size += b.length;
       if (r.size >= CHUNK_BYTES) this._flush(id, r);
@@ -612,6 +818,7 @@ class FastFiles {
       if (this.arriving.get(id) !== r) return;
       this._flush(id, r);
       if (this.arriving.get(id) !== r) return;
+      this._note('fx', 'recv');
       if (ok) ok();
       if (this.arriving.get(id) === r) this._drop(id, false);
     });

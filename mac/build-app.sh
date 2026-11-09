@@ -31,7 +31,13 @@ rm -rf "$STAGE" && mkdir -p "$STAGE/mac" "$STAGE/shared" "$STAGE/mac-helper/.bui
 rsync -a --exclude node_modules --exclude dist --exclude dev --exclude test --exclude dmg --exclude build-app.sh --exclude build-dmg.sh --exclude scripts/signing-identity.sh --exclude entitlements.plist ./ "$STAGE/mac/"
 cp "$ROOT"/shared/*.js "$ROOT"/shared/*.css "$ROOT"/shared/*.html "$STAGE/shared/"
 cp -R "$ROOT/shared/lang" "$STAGE/shared/"
-cp "$ROOT"/mac-helper/.build/release/macshare-helper "$ROOT"/mac-helper/.build/release/macshare-helper-multi "$ROOT"/mac-helper/.build/release/macshare-dockstub "$ROOT"/mac-helper/.build/release/macshare-calls "$STAGE/mac-helper/.build/release/"
+# TwinDesk Web (shared/web/webwire.js): its server, the page (web/, without the Shortcuts sources) and
+# the phone app's screen viewer and remote, which the page shows as they are.
+mkdir -p "$STAGE/shared/web" "$STAGE/web" "$STAGE/android-web"
+cp "$ROOT"/shared/web/*.js "$ROOT"/shared/web/*.html "$STAGE/shared/web/"
+rsync -a --exclude shortcuts-src "$ROOT/web/" "$STAGE/web/"
+cp -R "$ROOT/android/app/src/main/assets/web/." "$STAGE/android-web/"
+cp "$ROOT"/mac-helper/.build/release/macshare-helper "$ROOT"/mac-helper/.build/release/macshare-helper-multi "$ROOT"/mac-helper/.build/release/macshare-dockstub "$ROOT"/mac-helper/.build/release/macshare-calls "$ROOT"/mac-helper/.build/release/macshare-iosusb "$ROOT"/mac-helper/.build/release/libtwindesk-nowplaying.dylib "$STAGE/mac-helper/.build/release/"
 cp -R node_modules/ws "$STAGE/node_modules/"
 mkdir -p "$STAGE/mac/node_modules" && cp -R node_modules/ws "$STAGE/mac/node_modules/"
 cp "$ROOT/LICENSE" "$STAGE/"
@@ -62,7 +68,11 @@ cat > dist/extra.plist <<'EOF'
   <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>TwinDesk</string><key>CFBundleURLSchemes</key><array><string>macshare</string></array></dict></array>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
+<<<<<<< HEAD
   <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>ru</string><string>tr</string></array>
+=======
+  <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>ru</string><string>tr</string><string>pt-BR</string></array>
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   <key>NSHumanReadableCopyright</key><string>Copyright (C) 2026 inukaasith. GPL-3.0.</string>
 </dict></plist>
 EOF
@@ -74,7 +84,11 @@ EOF
   --no-prune --asar=false --out=dist --overwrite --quiet
 
 APP="dist/TwinDesk-darwin-$ARCH/TwinDesk.app"
+<<<<<<< HEAD
 cp -R locales/zh-Hans.lproj locales/ru.lproj locales/tr.lproj "$APP/Contents/Resources/"
+=======
+cp -R locales/zh-Hans.lproj locales/ru.lproj locales/tr.lproj locales/pt-BR.lproj "$APP/Contents/Resources/"
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
 rm -rf dist/TwinDesk.app && mv "$APP" dist/ && rm -rf "dist/TwinDesk-darwin-$ARCH" "$STAGE" dist/extra.plist
 # The Share menu extension (mac-helper/Sources/macshare-share), sandboxed as macOS requires.
 APPEX=dist/TwinDesk.app/Contents/PlugIns/MacShareShare.appex
@@ -207,7 +221,10 @@ if [ -n "$MAC_IDENTITY" ]; then
   find "$APP/Contents" -type f ! -path "$APP/Contents/MacOS/*" ! -path "$APPEX/*" ! -path "$SYSEXT/*" | while IFS= read -r f; do
     file -b "$f" | grep -q 'Mach-O' && printf '%s\t%s\n' "$(printf '%s' "$f" | tr -cd / | wc -c)" "$f"
   done | sort -rn | cut -f2- | while IFS= read -r f; do
-    codesign --force $OPTIONS $SIGN "$ID" --entitlements "$ENTITLEMENTS" "$f"
+    # A library gets none: entitlements belong to executables (a dylib's are meaningless, and
+    # notarization can flag them); executables (adb, the helpers) keep them.
+    if file -b "$f" | grep -q 'shared library'; then codesign --force $OPTIONS $SIGN "$ID" "$f"
+    else codesign --force $OPTIONS $SIGN "$ID" --entitlements "$ENTITLEMENTS" "$f"; fi
   done
   for b in "$APP"/Contents/Frameworks/*.framework "$APP"/Contents/Frameworks/*.app; do
     [ -e "$b" ] && codesign --force $OPTIONS $SIGN "$ID" --entitlements "$ENTITLEMENTS" "$b"

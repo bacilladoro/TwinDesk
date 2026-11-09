@@ -18,15 +18,18 @@ data class Host(
     val fp: String,
     val token: String,
     var lastSeen: Long,
+    var tail: List<String> = emptyList(), // its Tailscale addresses (Tailnet.kt)
 ) {
     fun json(): JSONObject = JSONObject()
         .put("id", id).put("name", name).put("os", os).put("address", address)
         .put("port", port).put("fp", fp).put("token", token).put("lastSeen", lastSeen)
+        .apply { if (tail.isNotEmpty()) put("tail", JSONArray(tail)) }
 
     companion object {
         fun from(o: JSONObject) = Host(
             o.getString("id"), o.optString("name", "Mac"), o.optString("os", "mac"), o.optString("address"),
             o.optInt("port", Proto.PORT), o.getString("fp"), o.getString("token"), o.optLong("lastSeen"),
+            Tailnet.clean(o.optJSONArray("tail")),
         )
     }
 }
@@ -34,10 +37,8 @@ data class Host(
 class Store(private val ctx: Context) {
     private val prefs = ctx.getSharedPreferences("twindesk", Context.MODE_PRIVATE)
 
-    // Every feature is off on a fresh install until it's turned on; a phone that had TwinDesk before
-    // keeps what it had (a switch it never saved was on for it). Decided once, before anything is saved.
-    val was: Boolean = if (prefs.contains("was")) prefs.getBoolean("was", false)
-    else prefs.contains("deviceId").also { prefs.edit().putBoolean("was", it).apply() }
+    // Every feature is off until it's turned on: a switch that was never saved is off (a fresh
+    // install has them all off; an update keeps what was saved).
 
     val deviceId: String = prefs.getString("deviceId", null) ?: Proto.randomHex(16).also {
         prefs.edit().putString("deviceId", it).apply()
@@ -62,18 +63,19 @@ class Store(private val ctx: Context) {
 
     fun setDeviceName(name: String) = prefs.edit().putString("deviceName", name.trim().take(64)).apply()
 
-    fun hosts(): List<Host> = try {
-        val a = JSONArray(prefs.getString("hosts", "[]"))
+    // key: "hosts" (computers), or "peerHosts" (phones this one connects to, Peer.kt).
+    fun hosts(key: String = "hosts"): List<Host> = try {
+        val a = JSONArray(prefs.getString(key, "[]"))
         (0 until a.length()).map { Host.from(a.getJSONObject(it)) }
     } catch (e: Exception) {
         emptyList()
     }
 
-    fun saveHosts(list: List<Host>) = prefs.edit().putString("hosts", jsonArray(list.map { it.json() }).toString()).apply()
+    fun saveHosts(list: List<Host>, key: String = "hosts") = prefs.edit().putString(key, jsonArray(list.map { it.json() }).toString()).apply()
 
-    fun putHost(h: Host) = saveHosts(listOf(h) + hosts().filter { it.id != h.id })
+    fun putHost(h: Host, key: String = "hosts") = saveHosts(listOf(h) + hosts(key).filter { it.id != h.id }, key)
 
-    fun forgetHost(id: String) = saveHosts(hosts().filter { it.id != id })
+    fun forgetHost(id: String, key: String = "hosts") = saveHosts(hosts(key).filter { it.id != id }, key)
 
     // Settings: one boolean per switch.
     fun flag(key: String, default: Boolean): Boolean = prefs.getBoolean(key, default)

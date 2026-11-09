@@ -60,6 +60,7 @@ class InputService : AccessibilityService() {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: ""
         if (pkg.isEmpty() || pkg == activePackage || pkg == "com.android.systemui") return
+        runCatching { Core.get(this).bank.front(pkg) } // a banking app: debugging off, TwinDesk exits (BankGuard.kt)
         activePackage = pkg
         resend()
     }
@@ -275,7 +276,7 @@ class Input(core: Core) : Feature(core) {
                     "k" -> s.key(m.optInt("d") == 1, m.optInt("k"), m.optInt("m"))
                 }
             }
-            Proto.T.PHONE_INPUT_ASK -> if (!on) Notify.input(core.ctx, core.host?.name ?: "Your computer", supported) else changed()
+            Proto.T.PHONE_INPUT_ASK -> if (!on) Notify.input(core.ctx, core.host?.name ?: tr("Your computer"), supported) else changed()
             Proto.T.PHONE_INPUT_VIA -> {
                 val v = m.optString("via")
                 if (v == "adb" || v == "phone" || v == "auto") { core.store.setPrefsString("inputVia", v); told = "$on/$v"; core.changed() }

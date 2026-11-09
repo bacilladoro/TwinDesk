@@ -33,15 +33,8 @@ function write(name, data) {
   fs.renameSync(tmp, target);
 }
 
-// Settings with defaults; missing keys are filled in. Every feature is off until it's turned on (a
-// fresh install); settings saved before keep theirs, and features off here were on for them (WAS_ON).
-// The features that defaulted to on before they all started off: a settings file saved then has
-// them on where it doesn't say.
-const WAS_ON = {
-  kvm: ['mouse', 'keyboard'], clipboard: ['enabled'], audio: ['phoneMedia'], remote: ['allow'],
-  files: ['acceptDrops', 'dragEdge', 'shortcuts'], notifs: ['receive'], apps: ['offer'], papps: ['on'], receive: ['on'], smb: ['connectPc'],
-};
-
+// Settings with defaults; missing keys are filled in. Every feature is off until it's turned on:
+// a setting the file doesn't hold is off, whatever wrote the file.
 const DEFAULT_SETTINGS = {
   macId: null,
   macName: null,
@@ -50,7 +43,11 @@ const DEFAULT_SETTINGS = {
   // sharing and switch Extend/Mirror (screen.ctl). pace: playback of shared screens, both
   // directions, the same on both computers (pair.sync): 'fast' (shown the moment it arrives) |
   // 'smooth' (about one frame of buffer, even motion).
+<<<<<<< HEAD
   sharing: { on: false, displayId: null, audio: false, remote: true, pace: 'fast', codec: 'h264' }, // codec: Share screen › Encoder (shared/screencodec.js)
+=======
+  sharing: { on: false, displayId: null, audio: false, remote: true, pace: 'fast', codec: 'h264', fps: 0 }, // fps: frame rate cap, 0 = the display's refresh rate (stream.js) // codec: Share screen › Encoder (shared/screencodec.js)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   virtual: { enabled: true, width: 1920, height: 1080, hiDPI: false, hz: 60 },
   bitrateMbps: 30,
   streamInput: true, // accept mouse/keyboard from Monitor 2
@@ -68,7 +65,11 @@ const DEFAULT_SETTINGS = {
     linked: true, // mouse and keyboard sharing on (the hotkey's double-tap switches it); synced with the peer
     linkedBy: {}, // The last `linked` per paired device id, restored on connect
     gestures: true, // Trackpad gestures work on the other computer (synced per pair)
+<<<<<<< HEAD
     shakeHome: true, // shake this Mac's mouse while driving: the pointer comes home (the helper's Shake.swift)
+=======
+    shakeHome: false, // shake this Mac's mouse while driving: the pointer comes home (the helper's Shake.swift)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
     syncPads: false, // every mouse and trackpad moves the one pointer; off: a computer's own takes it back (synced per pair)
     ble: true, // cursor sharing while the session runs through Bluetooth (synced per pair)
     hotkeySwitch: false, // keyboard only (mouse off): double-tap the hotkey to move the keyboard over and back
@@ -88,10 +89,17 @@ const DEFAULT_SETTINGS = {
   },
   // setupSkipped: the missing items when Setup was skipped; setupDone: Setup has been through once
   // (everything allowed, or skipped), so it never takes over the window again (General shows the rest).
+<<<<<<< HEAD
   ui: { tab: 'overview', setupSkipped: '', setupDone: false, language: '', theme: 'system', accent: '' }, // theme/accent: General › Appearance
   app: { openAtLogin: false, keepAwake: true, hud: true, inputProtocol: 'udp' }, // inputProtocol: udp = tdv2 input lane, tcp = tdv1 // hud = popup when switching computers
   updates: { auto: true, notified: '', skipped: '' }, // check GitHub for new releases; notified = last version announced, skipped = version ignored
   audio: { send: false, receive: false, muteLocal: false, volume: 1, phoneMedia: false, micSend: false, micReceive: false, micDevice: '', micOut: '' }, // Independent, both ways; phoneMedia: a phone's media controls on Overview
+=======
+  ui: { tab: 'overview', setupSkipped: '', setupDone: false, language: '', style: 'glass', theme: 'system', accent: '' }, // style/theme/accent: General › Appearance
+  app: { openAtLogin: false, keepAwake: true, hud: true, inputProtocol: 'udp', keepPinging: false }, // inputProtocol: udp = tdv2 input lane, tcp = tdv1 // hud = popup when switching computers
+  updates: { auto: true, notified: '', skipped: '' }, // check GitHub for new releases; notified = last version announced, skipped = version ignored
+  audio: { send: false, receive: false, muteLocal: false, engine: 'helper', volume: 1, phoneMedia: false, micSend: false, micReceive: false, micDevice: '', micOut: '' }, // Independent, both ways; phoneMedia: a phone's media controls on Overview
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   rezume: require('../shared/rezume.js').DEFAULTS, // ReZume tab (shared/rezume.js): off until turned on; what goes, which ways, where it shows
   remote: { allow: false }, // Remote tab (shared/phone-remote.js): the phone's Remote page moves the pointer and types here
   camera: { on: false, share: false, device: '', virtual: false, rotate: 0, target: 'obs' }, // Camera tab (shared/camshare.js): this Mac's camera to the other computer, off until turned on; virtual: the running camera's picture also goes to the virtual camera (shared/vcam.js); rotate: its picture turned clockwise; target: the virtual camera it feeds, 'obs' (OBS Virtual Camera, the default) or 'twindesk'
@@ -103,33 +111,44 @@ const DEFAULT_SETTINGS = {
   apps: { offer: false, onVirtual: false, moveWindows: false, moveKey: 'MetaRight' }, // The PC can list and open this Mac's apps; onVirtual: they open on the virtual display, in Mirror mode too (off: on the shared display, as always); moveWindows: a window dragged past the edge with moveKey held moves there (movewin.js)
   papps: { on: false }, // PC apps on this Mac, each window here with its own Dock icon
   // A phone as the peer: its screen window, apps and setup.
+<<<<<<< HEAD
   phone: { sound: false, bitrateMbps: 8, maxSize: 0, wallpaper: true, input: 'adb', inputPicked: false, mirror: 'auto', soundVia: 'auto', enterSends: true, arrowSwipe: false }, // mirror, soundVia: 'auto' | 'adb' | 'native' (shared/phonemodes.js) // input: 'adb' | 'phone' (phone-bridge.js ctl), automatic until picked (inputMode)
+=======
+  phone: { sound: false, bitrateMbps: 8, maxSize: 0, wallpaper: true, input: 'adb', inputPicked: false, mirror: 'auto', soundVia: 'auto', enterSends: true, arrowSwipe: false, uhid: false }, // mirror, soundVia: 'auto' | 'adb' | 'native' (shared/phonemodes.js) // input: 'adb' | 'phone' (phone-bridge.js ctl), automatic until picked (inputMode)
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   mount: { on: false }, // the phone in Finder (phonedrive.js), only when Mount is clicked
   // Calls, Messages, Photos and Files from a phone (shared/phonehub.js), each off until switched on.
   // callAudio: the calls' sound on this Mac over Bluetooth (btDevices: which paired device each phone is).
   hub: { calls: false, messages: false, media: false, files: false, callAudio: true, shareMount: false, shareServe: false, shareFolder: '' }, // share*: shared folders (foldershare.js)
   // Not on one network: Bluetooth for the session (blepipe.js), Wi-Fi for files and screens
   // (netlink.js). hotspots: {deviceId: {ssid, pass (safeStorage)}}, a phone's hotspot as typed once.
-  net: { ble: true, blePc: false, bleWifiOff: true, hotspots: {} }, // ble: with phones, blePc: with computers; bleWifiOff: none on the same Wi-Fi (blepolicy.js wifiQuiet)
+  net: { ble: true, blePc: false, bleWifiOff: true, hotspots: {}, tailscale: true, bleInput: false }, // ble: with phones, blePc: with computers; bleWifiOff: none on the same Wi-Fi (blepolicy.js wifiQuiet); tailscale: shared/tailnet.js; bleInput: mouse and keyboard over Bluetooth beside Wi-Fi (shared/bleinput.js)
 
   // The other computer's screen in a window here; framegen: shared/framegen.js.
   receive: { on: false, fullScreen: false, input: true, framegen: false },
   wake: { peers: {} }, // {deviceId: {name, macs, address, at}} from wol.info, for Wake
   pairSync: {}, // {deviceId: {feature: {out, in}}} two-way switches per pair (pairsync.js)
   smb: { connectPc: false, sharing: false, folder: '', secret: '' }, // secret = safeStorage
+  // TwinDesk Web (shared/web/webhub.js): this Mac as a page for iPhones and browsers; off until turned on.
+  // screen / control / camera: what web devices may do; port: https there, http on port + 1.
+  web: { on: false, port: 47870, screen: true, control: true, camera: true, mic: true },
 };
 
 function loadSettings() {
   const s = read('settings.json', {});
   if (s.sharing) s.sharing.on = false; // screen sharing never starts by itself
   const out = { ...DEFAULT_SETTINGS, ...s };
-  for (const k of ['wake', 'sharing', 'virtual', 'kvm', 'keys', 'clipboard', 'ui', 'app', 'audio', 'terminal', 'files', 'smb', 'apps', 'receive', 'papps', 'notifs', 'updates', 'phone', 'mount', 'hub', 'camera', 'remote']) out[k] = { ...DEFAULT_SETTINGS[k], ...(s[k] || {}) };
+  for (const k of ['wake', 'sharing', 'virtual', 'kvm', 'keys', 'clipboard', 'ui', 'app', 'audio', 'terminal', 'files', 'smb', 'apps', 'receive', 'papps', 'notifs', 'updates', 'phone', 'mount', 'hub', 'camera', 'remote', 'web']) out[k] = { ...DEFAULT_SETTINGS[k], ...(s[k] || {}) };
   out.rezume = require('../shared/rezume.js').normalize(s.rezume);
   out.ui.language = require('../shared/i18n.js').savedLanguage(out.ui.language);
+<<<<<<< HEAD
   { const Look = require('../shared/look.js'); out.ui.theme = Look.theme(out.ui.theme); out.ui.accent = Look.accent(out.ui.accent); }
   if (Object.keys(s).length) {
     for (const [k, keys] of Object.entries(WAS_ON)) for (const f of keys) if (!s[k] || s[k][f] === undefined) out[k][f] = true;
   }
+=======
+  { const Look = require('../shared/look.js'); out.ui.style = Look.style(out.ui.style); out.ui.theme = Look.theme(out.ui.theme); out.ui.accent = Look.accent(out.ui.accent); }
+>>>>>>> 2c2344fdb4bebb9003a4cd7bfc9d6801dcdd3a6b
   if (s.ui && s.ui.setupSkipped && s.ui.setupDone === undefined) out.ui.setupDone = true;
   if ((s.rev || 0) < 7) { // Clipboard instant by default
     out.clipboard.mode = 'instant';
